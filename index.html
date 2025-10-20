@@ -21,6 +21,18 @@
         body {
             font-family: 'Inter', sans-serif;
         }
+        /* Style for the CSV preview text area */
+        #csv-content-display {
+            white-space: pre-wrap;
+            word-break: break-all;
+            font-size: 0.8rem;
+            max-height: 400px;
+        }
+        /* Modal Backdrop */
+        .modal-backdrop {
+            background-color: rgba(0, 0, 0, 0.6);
+            backdrop-filter: blur(4px);
+        }
     </style>
 </head>
 <body class="bg-gray-50 min-h-screen flex items-center justify-center p-4">
@@ -92,10 +104,10 @@
         <!-- Action and Status Area -->
         <div class="flex justify-between items-center mb-6 border-t pt-4">
             <h2 class="text-2xl font-bold text-gray-700">Recorded Data (<span id="count">0</span>)</h2>
-            <button id="export-button" onclick="exportToCSV()" disabled
+            <button id="export-button" onclick="showCSVPreview()" disabled
                     class="bg-gray-500 hover:bg-gray-600 text-white font-medium py-2 px-4 rounded-lg shadow-md transition duration-150 disabled:bg-gray-400 flex items-center">
-                    <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
-                Export to CSV
+                    <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path></svg>
+                Preview CSV
             </button>
         </div>
 
@@ -107,6 +119,35 @@
             </ul>
         </div>
     </div>
+    
+    <!-- CSV Preview Modal (Hidden by Default) -->
+    <div id="csv-modal" class="fixed inset-0 z-50 flex items-center justify-center modal-backdrop hidden transition-opacity duration-300">
+        <div class="bg-white rounded-xl shadow-2xl w-full max-w-lg mx-4 p-6 transform transition-transform duration-300 scale-95">
+            <h2 class="text-2xl font-bold text-emerald-600 mb-4 border-b pb-2">CSV Data Preview</h2>
+
+            <div id="csv-content-display" class="bg-gray-100 p-3 rounded-lg border border-gray-300 overflow-y-auto custom-scrollbar mb-4 text-gray-800 font-mono">
+                <!-- CSV content will be injected here -->
+            </div>
+
+            <div class="flex flex-col md:flex-row gap-3">
+                <button id="copy-csv-button" onclick="copyCSVToClipboard()"
+                        class="flex-1 bg-emerald-500 hover:bg-emerald-600 text-white font-semibold py-3 px-4 rounded-lg shadow-md transition duration-150 flex items-center justify-center">
+                    <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v1M6 18h4M6 15h4M6 12h4"></path></svg>
+                    Copy to Clipboard
+                </button>
+                <button id="download-csv-button" onclick="triggerCSVDownload()"
+                        class="flex-1 bg-blue-500 hover:bg-blue-600 text-white font-semibold py-3 px-4 rounded-lg shadow-md transition duration-150 flex items-center justify-center">
+                    <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+                    Download .CSV File
+                </button>
+            </div>
+
+            <button onclick="closeCSVModal()" class="w-full mt-4 bg-gray-300 hover:bg-gray-400 text-gray-800 font-semibold py-2 rounded-lg transition duration-150">
+                Close Preview
+            </button>
+        </div>
+    </div>
+
 
     <!-- Firebase Imports and Logic -->
     <script type="module">
@@ -175,6 +216,7 @@
         let userId = null;
         let recordedData = []; 
         let extractedData = null; 
+        let currentCSVString = ''; // Store the generated CSV string
 
         // --- DOM ELEMENTS ---
         const imageFileInput = document.getElementById('image-file-input');
@@ -195,6 +237,10 @@
         const displayBarcode = document.getElementById('display-barcode');
         const displayDate = document.getElementById('display-date');
 
+        // Modal Elements
+        const csvModal = document.getElementById('csv-modal');
+        const csvContentDisplay = document.getElementById('csv-content-display');
+        
         // Display initial IDs
         document.getElementById('app-id').textContent = appId;
         
@@ -303,7 +349,7 @@
                         await attemptAuth();
                         // If successful, the listener will fire again with a 'user' object.
                     } catch (error) {
-                        // Authentication failed (this catches the console error the user provided)
+                        // Authentication failed 
                         console.error("Critical Authentication Failed:", error);
                         
                         // Provide the specific fix instruction
@@ -462,7 +508,7 @@
                         break; // Exit loop on success
                     } catch (error) {
                         lastError = error;
-                        // console.error(`Attempt ${i + 1} failed:`, error.message); // Commented out to reduce console clutter during backoff
+                        // console.error(`Attempt ${i + 1} failed:`, error.message); // Silent retry
                         if (i < maxRetries - 1) {
                             const delay = Math.pow(2, i) * 1000;
                             await new Promise(resolve => setTimeout(resolve, delay));
@@ -708,15 +754,9 @@
             exportButton.disabled = recordedData.length === 0;
         }
 
-        // Function to convert data to CSV and trigger download
-        window.exportToCSV = function() {
-            if (recordedData.length === 0) {
-                alertMessage("Export Error", "No data to export.");
-                return;
-            }
-
-            exportButton.disabled = true;
-            exportButton.textContent = 'Preparing...';
+        // --- CSV GENERATION (Moved to a separate function) ---
+        function generateCSV() {
+            if (recordedData.length === 0) return '';
 
             // ADDED NEW HEADERS
             const headers = [
@@ -743,8 +783,73 @@
                 
                 csv += [identifier, barcode, date, timestamp, userAgent, resolution, recordId].join(',') + '\n';
             });
+            return csv;
+        }
 
-            const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+        // --- NEW MODAL FUNCTIONS ---
+
+        // 1. Show Preview Modal
+        window.showCSVPreview = function() {
+            if (recordedData.length === 0) {
+                alertMessage("Export Error", "No data to preview.");
+                return;
+            }
+
+            // Generate CSV string once and store it
+            currentCSVString = generateCSV();
+            
+            // Set content in the modal display area
+            csvContentDisplay.textContent = currentCSVString;
+            
+            // Show the modal
+            csvModal.classList.remove('hidden');
+            // Add a slight delay for smoother animation effect (optional)
+            setTimeout(() => csvModal.style.opacity = '1', 10);
+        }
+
+        // 2. Close Modal
+        window.closeCSVModal = function() {
+            csvModal.classList.add('hidden');
+            csvModal.style.opacity = '0';
+        }
+
+        // 3. Copy to Clipboard (The preferred mobile interaction)
+        window.copyCSVToClipboard = function() {
+            if (!currentCSVString) {
+                alertMessage("Copy Error", "No data generated to copy.");
+                return;
+            }
+
+            // Fallback for secure copy in iFrame/browser environment
+            try {
+                // Use execCommand('copy') which is more reliable in various sandbox environments (like Canvas)
+                const textArea = document.createElement("textarea");
+                textArea.value = currentCSVString;
+                textArea.style.position = "fixed";  // Prevents scrolling to bottom
+                textArea.style.top = "0";
+                textArea.style.left = "0";
+                textArea.style.opacity = "0";
+                document.body.appendChild(textArea);
+                textArea.focus();
+                textArea.select();
+                
+                document.execCommand('copy');
+                document.body.removeChild(textArea);
+                alertMessage("Success", "CSV data successfully copied to clipboard!");
+            } catch (err) {
+                console.error('Copy to clipboard failed:', err);
+                alertMessage("Copy Error", "Failed to copy data. Please try the download option.");
+            }
+        }
+
+        // 4. Trigger Download (The original action, now secondary)
+        window.triggerCSVDownload = function() {
+            if (!currentCSVString) {
+                alertMessage("Download Error", "No data to download.");
+                return;
+            }
+            
+            const blob = new Blob([currentCSVString], { type: 'text/csv;charset=utf-8;' });
             const link = document.createElement("a");
             const url = URL.createObjectURL(blob);
             
@@ -755,11 +860,10 @@
             document.body.appendChild(link);
             link.click();
             document.body.removeChild(link);
-            
-            exportButton.textContent = 'Export to CSV';
-            exportButton.disabled = false;
-        }
 
+            closeCSVModal(); // Close modal after initiating download
+        }
+        
     </script>
 </body>
 </html>
