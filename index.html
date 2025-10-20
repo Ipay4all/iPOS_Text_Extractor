@@ -26,9 +26,9 @@
 <body class="bg-gray-50 min-h-screen flex items-center justify-center p-4">
 
     <div id="app-container" class="bg-white shadow-2xl rounded-xl w-full max-w-4xl p-6 md:p-10 transition-all duration-300">
-        <!-- FIXED: Changed '4xl' to 'text-4xl' for correct Tailwind font size -->
-        <h1 class="text-4xl font-extrabold text-emerald-600 mb-2">Multi-Field Identifier Extractor</h1>
-        
+        <h1 class="4xl font-extrabold text-emerald-600 mb-2">Multi-Field Identifier Extractor</h1>
+        <p class="text-gray-500 mb-6 border-b pb-4">Use your **mobile camera** to capture an image and extract three structured fields: **Identifier (15-digit)**, **Barcode Number (17-digit)**, and **Expiry Date** (DD/MM/YY).</p>
+
         <!-- User/Auth Info -->
         <div class="mb-6 bg-emerald-50 p-3 rounded-lg text-sm text-emerald-800">
             <p><strong>App ID:</strong> <span id="app-id">...</span></p>
@@ -65,7 +65,7 @@
 
         <!-- Extracted Data Area -->
         <div id="extraction-result-area" class="mt-6 mb-8 p-4 border rounded-xl bg-gray-100 shadow-md">
-            <h3 class="text-2xl font-bold text-gray-700 mb-3">3. Extracted Data Ready to Save</h3>
+            <h3 class="2xl font-bold text-gray-700 mb-3">3. Extracted Data Ready to Save</h3>
             <div id="extracted-display" class="min-h-[50px] p-3 bg-white border border-dashed border-gray-300 rounded-lg text-gray-600 whitespace-pre-wrap text-sm font-mono break-all space-y-2">
                 <p><strong>Identifier (15-digit):</strong> <span id="display-identifier" class="font-mono text-gray-800">---</span></p>
                 <p><strong>Barcode (17-digit):</strong> <span id="display-barcode" class="font-mono text-gray-800">---</span></p>
@@ -112,7 +112,7 @@
             getAuth, 
             signInAnonymously, 
             signInWithCustomToken, 
-            // onAuthStateChanged is no longer needed in this pattern
+            onAuthStateChanged 
         } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { 
             getFirestore, 
@@ -125,20 +125,53 @@
 
         // --- GLOBAL CONSTANTS ---
         const API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent';
-        const apiKey = "AIzaSyCA4MpL1N3GpJohJbc6zbjb6C4cEEvqUI0"; // API key will be provided by Canvas runtime
+        
+        // ====================================================================================
+        // 1. GEMINI API KEY (Used for image processing)
+        // ====================================================================================
+        const apiKey = "AIzaSyCA4MpL1N3GpJohJbc6zbjb6C4cEEvqUI0"; // NOTE: Should typically be left blank if relying on platform injection.
 
-        // --- GLOBAL VARIABLES (Provided by Canvas) ---
+        // --- GLOBAL VARIABLES (MANDATORY Canvas Environment Checks) ---
+        // MANDATORY: Check for __app_id or use fallback
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
-        const firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{}');
-        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+        
+        // MANDATORY: Check for __initial_auth_token or use fallback
+        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null; 
+        
+        // ====================================================================================
+        // 2. FIREBASE CONFIGURATION (MANDATORY Canvas Environment Checks)
+        // ====================================================================================
+        
+        // Default configuration based on user's previous hardcoded values, used if the 
+        // environment variable __firebase_config is not available or fails to parse.
+        const defaultFirebaseConfig = { 
+            apiKey: "AIzaSyCA4MpL1N3GpJohJbc6zbjb6C4cEEvqUI0",
+            authDomain: "iposimageatext.firebaseapp.com",
+            projectId: "iposimageatext",
+            storageBucket: "iposimageatext.appspot.com",
+            messagingSenderId: "1022934110795",
+            appId: "1:1022934110795:web:db87f7d00ba3f4e8524f7a",
+            measurementId: "G-123YWKHX6"
+        };
+        
+        let firebaseConfig = defaultFirebaseConfig;
+
+        // MANDATORY: Check for __firebase_config or use fallback
+        if (typeof __firebase_config !== 'undefined' && __firebase_config) {
+            try {
+                firebaseConfig = JSON.parse(__firebase_config);
+            } catch (e) {
+                console.error("Failed to parse __firebase_config. Using default config.", e);
+            }
+        }
         
         // --- APP STATE ---
         let app;
         let db;
         let auth;
         let userId = null;
-        let recordedData = []; 
-        let extractedData = null; 
+        let recordedData = []; // Renamed from recordedNumbers
+        let extractedData = null; // Holds the structured JSON result from the AI
 
         // --- DOM ELEMENTS ---
         const imageFileInput = document.getElementById('image-file-input');
@@ -174,9 +207,75 @@
         }
 
         // -------------------------------------------------------------------
-        // 1. FIREBASE INITIALIZATION AND AUTHENTICATION (Refactored for robustness)
+        // 1. FIREBASE INITIALIZATION AND AUTHENTICATION
         // -------------------------------------------------------------------
 
+        try {
+            app = initializeApp(firebaseConfig);
+            db = getFirestore(app);
+            auth = getAuth(app);
+            
+            showLoading("Initializing Firebase...");
+
+            // Generate a fallback ID using crypto.randomUUID or a simpler fallback
+            const fallbackUserId = (typeof crypto !== 'undefined' && crypto.randomUUID) 
+                                   ? crypto.randomUUID() 
+                                   : 'fallback-' + Math.random().toString(36).substring(2, 15);
+
+            // Function to attempt authentication
+            const attemptAuth = async () => {
+                if (initialAuthToken) {
+                    // Try Custom Token (Canvas default)
+                    return signInWithCustomToken(auth, initialAuthToken);
+                } else {
+                    // Try Anonymous Sign In (External or Dev fallback)
+                    return signInAnonymously(auth);
+                }
+            };
+            
+            // Set up Auth State Listener
+            onAuthStateChanged(auth, async (user) => {
+                if (user) {
+                    // Successful login via token or anonymous sign-in
+                    userId = user.uid;
+                    document.getElementById('user-id').textContent = `${userId} (${initialAuthToken ? 'Custom Token' : 'Anonymous'})`;
+                    console.log("Authentication successful, user ID set:", userId);
+                    hideLoading();
+                    setupRealtimeListener();
+                    resetDisplay();
+                } else {
+                    // If no user is logged in, attempt the login
+                    try {
+                        await attemptAuth();
+                        // If successful, the listener will fire again with a 'user' object.
+                    } catch (error) {
+                        // Authentication failed (this catches the console error the user provided)
+                        console.error("Critical Authentication Failed:", error);
+                        
+                        // Provide the specific fix instruction
+                        displayError(`Authentication Failed! You must enable the 'Identity Toolkit API' in your Google Cloud Project console (Project ID: ${firebaseConfig.projectId}) to use Anonymous sign-in.`);
+                        
+                        // Fallback: Proceed with a non-authenticated placeholder user ID
+                        userId = fallbackUserId;
+                        document.getElementById('user-id').textContent = `${userId} (UNAUTHENTICATED FALLBACK)`;
+                        console.warn("Proceeding with UNAUTHENTICATED FALLBACK ID. Firestore operations may still fail if security rules require an authenticated user.");
+
+                        hideLoading();
+                        setupRealtimeListener();
+                        resetDisplay();
+                    }
+                }
+                
+                // Ensure buttons are active once we have a userId (even if fallback)
+                processImageButton.disabled = imageFileInput.files.length === 0;
+            });
+
+        } catch (error) {
+            console.error("Firebase initialization failed:", error);
+            // This error now means the config keys themselves are wrong, or the Firebase project is not set up correctly.
+            displayError("Failed to initialize Firebase. Check your configuration keys and project setup.");
+        }
+        
         // Utility Functions
         function showLoading(message) {
             loadingMessage.textContent = message;
@@ -193,7 +292,7 @@
             hideLoading();
             setTimeout(() => {
                 errorDiv.classList.add('hidden');
-            }, 5000);
+            }, 7000); // Increased timeout for reading the detailed auth error
         }
 
         function alertMessage(title, message) {
@@ -203,51 +302,6 @@
                 errorDiv.classList.add('hidden');
             }, 5000);
         }
-
-        async function initFirebase() {
-            if (Object.keys(firebaseConfig).length === 0) {
-                console.warn("Firebase configuration is missing. Data saving will not work.");
-                userId = crypto.randomUUID(); // Fallback for UI display
-                document.getElementById('user-id').textContent = userId + " (Local)";
-                processImageButton.disabled = imageFileInput.files.length === 0;
-                hideLoading();
-                resetDisplay();
-                return;
-            }
-
-            try {
-                showLoading("Initializing and authenticating...");
-                app = initializeApp(firebaseConfig);
-                db = getFirestore(app);
-                auth = getAuth(app);
-                
-                // Perform sign-in directly (token or anonymous)
-                if (initialAuthToken) {
-                    await signInWithCustomToken(auth, initialAuthToken);
-                } else {
-                    await signInAnonymously(auth);
-                }
-
-                const user = auth.currentUser;
-                if (user) {
-                    userId = user.uid;
-                    document.getElementById('user-id').textContent = userId;
-                    processImageButton.disabled = imageFileInput.files.length === 0;
-                    setupRealtimeListener(); // Start listening only after userId is set
-                } else {
-                    throw new Error("Authentication failed after sign-in attempt.");
-                }
-
-            } catch (error) {
-                console.error("Firebase initialization failed:", error);
-                displayError("Failed to initialize Firebase. Check console for details.");
-            } finally {
-                hideLoading();
-                resetDisplay(); // Reset fields on successful auth/init
-            }
-        }
-        
-        initFirebase(); // Start the app initialization process
 
         // -------------------------------------------------------------------
         // 2. IMAGE HANDLING AND PREPROCESSING
@@ -313,6 +367,11 @@
             try {
                 const base64ImageData = await toBase64(file);
                 
+                // Check if API Key is present for external deployment
+                if (!apiKey || apiKey === "YOUR_ACTUAL_GEMINI_API_KEY_HERE") {
+                    // NOTE: Removed the throw, assuming Canvas will inject or user provided a key.
+                }
+
                 const payload = {
                     contents: [
                         {
@@ -349,11 +408,12 @@
                         });
 
                         if (!response.ok) {
-                            throw new Error(`HTTP error! status: ${response.status}`);
+                            throw new Error(`HTTP error! status: ${response.status} - ${await response.text()}`);
                         }
                         break; // Exit loop on success
                     } catch (error) {
                         lastError = error;
+                        // console.error(`Attempt ${i + 1} failed:`, error.message); // Commented out to reduce console clutter during backoff
                         if (i < maxRetries - 1) {
                             const delay = Math.pow(2, i) * 1000;
                             await new Promise(resolve => setTimeout(resolve, delay));
@@ -367,7 +427,7 @@
                 const jsonText = result?.candidates?.[0]?.content?.parts?.[0]?.text;
                 
                 if (!jsonText) {
-                    throw new Error("AI returned no content.");
+                    throw new Error("AI returned no content. Response JSON: " + JSON.stringify(result));
                 }
 
                 // Parse and validate the JSON response
@@ -403,7 +463,7 @@
                 displayBarcode.textContent = data.barcode_number || 'N/A';
                 displayDate.textContent = data.expiry_date || 'N/A';
                 
-                // Enable save only if we have at least one valid data point
+                // Enable save only if we have at least one valid number and a date
                 if (data.identifier.length === 15 || data.barcode_number.length === 17 || data.expiry_date.length > 0) {
                     saveExtractedButton.disabled = false;
                 } else {
@@ -442,12 +502,12 @@
                 return;
             }
             
-            // Check if Firebase is initialized before attempting save
+            // Check if Firebase is initialized
             if (!db) {
-                alertMessage("Database Error", "Database is not configured. Cannot save data locally.");
+                displayError("Database is not configured. Cannot save data.");
                 return;
             }
-
+            
             saveExtractedButton.disabled = true;
             saveExtractedButton.textContent = `Saving data...`;
             showLoading(`Saving extracted data to Firestore...`);
@@ -472,7 +532,7 @@
 
             } catch (e) {
                 console.error("Error adding document: ", e);
-                displayError("Could not save the data to the database.");
+                displayError("Could not save the data to the database. Check Firestore Rules!");
             } finally {
                 saveExtractedButton.disabled = true;
                 saveExtractedButton.textContent = 'Save Data to Firestore';
@@ -482,8 +542,6 @@
 
         // Function to set up the real-time listener for the data
         function setupRealtimeListener() {
-            if (!db) return; // Skip if database isn't configured
-
             const collectionRef = getCollectionRef();
             if (!collectionRef) return;
 
@@ -501,7 +559,8 @@
                         identifier: data.identifier,
                         barcode_number: data.barcode_number,
                         expiry_date: data.expiry_date,
-                        timestamp: data.timestamp ? data.timestamp.toDate() : new Date()
+                        // Ensure timestamp conversion is safe
+                        timestamp: data.timestamp && typeof data.timestamp.toDate === 'function' ? data.timestamp.toDate() : new Date()
                     });
                 });
                 
@@ -513,7 +572,8 @@
             }, (error) => {
                 console.error("Error listening to Firestore:", error);
                 hideLoading();
-                displayError("Real-time data failed to load. Check console.");
+                // This usually indicates an error in Security Rules or connection
+                displayError("Real-time data failed to load. Check Firebase Security Rules.");
             });
         }
 
@@ -545,7 +605,7 @@
                     
                 // Format the 17-digit code for readability (5-5-5-2) - Adjust as needed
                 const rawBarcode = String(item.barcode_number || 'N/A');
-                const displayBarcodeFormatted = rawBarcode.length >= 15 
+                const displayBarcodeFormatted = rawBarcode.length > 5 
                     ? rawBarcode.slice(0, 5) + ' ' + rawBarcode.slice(5, 10) + ' ' + rawBarcode.slice(10, 15) + ' ' + rawBarcode.slice(15)
                     : rawBarcode;
 
