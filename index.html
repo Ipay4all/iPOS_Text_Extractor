@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Multi-Field Identifier Extractor</title>
+    <title>Multi-Card Identifier Extractor</title>
     <!-- Load Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
@@ -21,14 +21,7 @@
         body {
             font-family: 'Inter', sans-serif;
         }
-        /* Style for the CSV preview text area */
-        #csv-content-display {
-            white-space: pre-wrap;
-            word-break: break-all;
-            font-size: 0.8rem;
-            max-height: 400px;
-        }
-        /* Modal Backdrop */
+        /* Modal Backdrop (Removed, but keeping for structural memory if needed later) */
         .modal-backdrop {
             background-color: rgba(0, 0, 0, 0.6);
             backdrop-filter: blur(4px);
@@ -38,8 +31,8 @@
 <body class="bg-gray-50 min-h-screen flex items-center justify-center p-4">
 
     <div id="app-container" class="bg-white shadow-2xl rounded-xl w-full max-w-4xl p-6 md:p-10 transition-all duration-300">
-        <h1 class="4xl font-extrabold text-emerald-600 mb-2">Multi-Field Identifier Extractor</h1>
-        <p class="text-gray-500 mb-6 border-b pb-4">Capture an image to automatically extract and save structured card data.</p>
+        <h1 class="4xl font-extrabold text-emerald-600 mb-2">Multi-Card Identifier Extractor</h1>
+        <p class="text-gray-500 mb-6 border-b pb-4">Capture an image containing up to 4 cards to extract data simultaneously.</p>
 
         <!-- User/Auth Info -->
         <div class="mb-6 bg-emerald-50 p-3 rounded-lg text-sm text-emerald-800">
@@ -74,7 +67,7 @@
 
             <button id="process-image-button" onclick="processImageForNumbers()" disabled
                     class="bg-emerald-500 hover:bg-emerald-600 text-white font-semibold py-3 px-6 rounded-lg shadow-md transition duration-150 disabled:bg-gray-400 flex items-center justify-center">
-                2. Extract 3 Fields (Identifier, Barcode, Date)
+                2. Extract ALL Cards (Identifier, Barcode, Date)
             </button>
             
             <!-- Loading Indicator for Image Processing -->
@@ -86,17 +79,16 @@
 
         <!-- Extracted Data Area -->
         <div id="extraction-result-area" class="mt-6 mb-8 p-4 border rounded-xl bg-gray-100 shadow-md">
-            <h3 class="2xl font-bold text-gray-700 mb-3">3. Extracted Data Ready to Save</h3>
+            <h3 class="2xl font-bold text-gray-700 mb-3">3. Extracted Cards Ready to Save</h3>
             <div id="extracted-display" class="min-h-[50px] p-3 bg-white border border-dashed border-gray-300 rounded-lg text-gray-600 whitespace-pre-wrap text-sm font-mono break-all space-y-2">
-                <p><strong>Identifier (15-digit):</strong> <span id="display-identifier" class="font-mono text-gray-800">---</span></p>
-                <p><strong>Barcode (17-digit):</strong> <span id="display-barcode" class="font-mono text-gray-800">---</span></p>
-                <p><strong>Expiry Date (DD/MM/YY):</strong> <span id="display-date" class="font-mono text-gray-800">---</span></p>
+                <p><strong>Cards Found:</strong> <span id="display-card-count" class="font-mono text-gray-800 font-semibold">---</span></p>
+                <p id="display-status" class="text-xs text-gray-500 italic">Upload an image of 1-4 cards to begin extraction.</p>
             </div>
             
             <button id="save-extracted-button" onclick="saveExtractedNumbers()" disabled
                     class="w-full mt-4 bg-blue-500 hover:bg-blue-600 text-white font-semibold py-3 rounded-lg shadow-md transition duration-150 disabled:bg-gray-400 flex items-center justify-center">
                 <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7H5a2 2 0 00-2 2v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3-3m0 0l-3 3m3-3v8"></path></svg>
-                Save Data to Firestore
+                Save <span id="save-count">0</span> Card(s) to Firestore
             </button>
         </div>
 
@@ -104,10 +96,12 @@
         <!-- Action and Status Area -->
         <div class="flex justify-between items-center mb-6 border-t pt-4">
             <h2 class="text-2xl font-bold text-gray-700">Recorded Data (<span id="count">0</span>)</h2>
-            <button id="export-button" onclick="showCSVPreview()" disabled
+            
+            <!-- UPDATED: Direct Download Button -->
+            <button id="export-button" onclick="triggerCSVDownload()" disabled
                     class="bg-gray-500 hover:bg-gray-600 text-white font-medium py-2 px-4 rounded-lg shadow-md transition duration-150 disabled:bg-gray-400 flex items-center">
-                    <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path></svg>
-                Preview CSV
+                <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+                Download CSV
             </button>
         </div>
 
@@ -120,34 +114,7 @@
         </div>
     </div>
     
-    <!-- CSV Preview Modal (Hidden by Default) -->
-    <div id="csv-modal" class="fixed inset-0 z-50 flex items-center justify-center modal-backdrop hidden transition-opacity duration-300">
-        <div class="bg-white rounded-xl shadow-2xl w-full max-w-lg mx-4 p-6 transform transition-transform duration-300 scale-95">
-            <h2 class="text-2xl font-bold text-emerald-600 mb-4 border-b pb-2">CSV Data Preview</h2>
-
-            <div id="csv-content-display" class="bg-gray-100 p-3 rounded-lg border border-gray-300 overflow-y-auto custom-scrollbar mb-4 text-gray-800 font-mono">
-                <!-- CSV content will be injected here -->
-            </div>
-
-            <div class="flex flex-col md:flex-row gap-3">
-                <button id="copy-csv-button" onclick="copyCSVToClipboard()"
-                        class="flex-1 bg-emerald-500 hover:bg-emerald-600 text-white font-semibold py-3 px-4 rounded-lg shadow-md transition duration-150 flex items-center justify-center">
-                    <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v1M6 18h4M6 15h4M6 12h4"></path></svg>
-                    Copy to Clipboard
-                </button>
-                <button id="download-csv-button" onclick="triggerCSVDownload()"
-                        class="flex-1 bg-blue-500 hover:bg-blue-600 text-white font-semibold py-3 px-4 rounded-lg shadow-md transition duration-150 flex items-center justify-center">
-                    <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
-                    Download .CSV File
-                </button>
-            </div>
-
-            <button onclick="closeCSVModal()" class="w-full mt-4 bg-gray-300 hover:bg-gray-400 text-gray-800 font-semibold py-2 rounded-lg transition duration-150">
-                Close Preview
-            </button>
-        </div>
-    </div>
-
+    <!-- NOTE: CSV Preview Modal HTML was removed as requested -->
 
     <!-- Firebase Imports and Logic -->
     <script type="module">
@@ -215,15 +182,15 @@
         let auth;
         let userId = null;
         let recordedData = []; 
-        let extractedData = null; 
-        let currentCSVString = ''; // Store the generated CSV string
-
+        let extractedData = null; // Will now hold an ARRAY of extracted card objects
+        
         // --- DOM ELEMENTS ---
         const imageFileInput = document.getElementById('image-file-input');
         const imagePreview = document.getElementById('image-preview');
         const imagePreviewContainer = document.getElementById('image-preview-container');
         const processImageButton = document.getElementById('process-image-button');
         const saveExtractedButton = document.getElementById('save-extracted-button');
+        const saveCountSpan = document.getElementById('save-count');
         const exportButton = document.getElementById('export-button');
         const numbersList = document.getElementById('numbers-list');
         const emptyState = document.getElementById('empty-state');
@@ -233,14 +200,10 @@
         const errorDiv = document.getElementById('error-message');
         const deviceInfoDisplay = document.getElementById('device-info-display');
         
-        const displayIdentifier = document.getElementById('display-identifier');
-        const displayBarcode = document.getElementById('display-barcode');
-        const displayDate = document.getElementById('display-date');
+        // Updated Display Elements for Multi-Card summary
+        const displayCardCount = document.getElementById('display-card-count');
+        const displayStatus = document.getElementById('display-status');
 
-        // Modal Elements
-        const csvModal = document.getElementById('csv-modal');
-        const csvContentDisplay = document.getElementById('csv-content-display');
-        
         // Display initial IDs
         document.getElementById('app-id').textContent = appId;
         
@@ -249,11 +212,11 @@
         
         // Initial Display Reset
         function resetDisplay() {
-            displayIdentifier.textContent = '---';
-            displayBarcode.textContent = '---';
-            displayDate.textContent = '---';
+            displayCardCount.textContent = '---';
+            displayStatus.textContent = 'Awaiting new extraction.';
             saveExtractedButton.disabled = true;
-            extractedData = null;
+            saveCountSpan.textContent = '0';
+            extractedData = null; // Clear array
         }
         
         // --- DEVICE METADATA ---
@@ -439,21 +402,25 @@
         }
 
         // -------------------------------------------------------------------
-        // 3. GEMINI API CALL FOR STRUCTURED EXTRACTION (JSON)
+        // 3. GEMINI API CALL FOR STRUCTURED EXTRACTION (JSON ARRAY)
         // -------------------------------------------------------------------
 
+        // NEW SCHEMA: Expects an array of card objects
         const structuredResponseSchema = {
-            type: "OBJECT",
-            properties: {
-                "identifier": { "type": "STRING", "description": "The 15-digit code from the top of the card (e.g., 272290114421700), without spaces." },
-                "barcode_number": { "type": "STRING", "description": "The 17-digit number associated with the barcode (e.g., 13194124008710000), without spaces." },
-                "expiry_date": { "type": "STRING", "description": "The expiration date in DD/MM/YY format (e.g., 03/12/24, meaning 3rd December 2024)." }
-            },
-            propertyOrdering: ["identifier", "barcode_number", "expiry_date"]
+            type: "ARRAY",
+            items: {
+                type: "OBJECT",
+                properties: {
+                    "identifier": { "type": "STRING", "description": "The 15-digit code from the top of the card." },
+                    "barcode_number": { "type": "STRING", "description": "The 17-digit number associated with the barcode." },
+                    "expiry_date": { "type": "STRING", "description": "The expiration date in DD/MM/YY format." }
+                },
+                propertyOrdering: ["identifier", "barcode_number", "expiry_date"]
+            }
         };
 
-        const systemPrompt = "You are a specialized data extraction bot. Your task is to analyze the provided image of a card and extract exactly three specific pieces of information as a valid JSON object. For numbers, provide only the raw digits, no spaces. For the date, provide the DD/MM/YY format. If a value is not found, use an empty string for that field.";
-        const userQuery = "Extract the 15-digit identifier from the top, the 17-digit barcode number, and the expiry date (DD/MM/YY).";
+        const systemPrompt = "You are a specialized data extraction bot. Your task is to analyze the provided image, identify all individual cards (expected 1 to 4 cards), and extract exactly three specific pieces of information from EACH card as a valid JSON ARRAY of objects. For numbers, provide only the raw digits, no spaces. For the date, provide the DD/MM/YY format. If a value is not found on a specific card, use an empty string for that field in that card's object.";
+        const userQuery = "Identify all cards in the image. For each card, extract the 15-digit identifier, the 17-digit barcode number, and the expiry date (DD/MM/YY). Return the results as a JSON array of objects.";
 
 
         window.processImageForNumbers = async function() {
@@ -525,44 +492,41 @@
                     throw new Error("AI returned no content. Response JSON: " + JSON.stringify(result));
                 }
 
-                // Parse and validate the JSON response
-                const data = JSON.parse(jsonText);
+                // Parse the array response
+                let dataArray = JSON.parse(jsonText);
                 
-                // Basic data cleaning and validation
-                data.identifier = (data.identifier || '').replace(/[^0-9]/g, '').trim();
-                data.barcode_number = (data.barcode_number || '').replace(/[^0-9]/g, '').trim();
-                data.expiry_date = (data.expiry_date || '').trim();
-
-                let validationError = null;
-                if (data.identifier.length > 0 && data.identifier.length !== 15) {
-                    validationError = `Identifier expected 15 digits, found ${data.identifier.length}.`;
-                }
-                if (data.barcode_number.length > 0 && data.barcode_number.length !== 17) {
-                    validationError = validationError ? validationError + " " : "";
-                    validationError += `Barcode expected 17 digits, found ${data.barcode_number.length}.`;
-                }
-                // Date format validation is flexible, checking for content
-                if (!data.expiry_date) {
-                     validationError = validationError ? validationError + " " : "";
-                     validationError += `Expiry Date not found.`;
+                // Ensure dataArray is actually an array (in case model outputs a single object)
+                if (!Array.isArray(dataArray)) {
+                    dataArray = [dataArray];
                 }
 
-                if (validationError) {
-                    displayError(validationError);
-                    alertMessage("Validation Error", validationError);
-                }
-                
+                // Process and validate each card in the array
+                const validatedCards = dataArray.map(data => {
+                    // Basic data cleaning and validation
+                    data.identifier = (data.identifier || '').replace(/[^0-9]/g, '').trim();
+                    data.barcode_number = (data.barcode_number || '').replace(/[^0-9]/g, '').trim();
+                    data.expiry_date = (data.expiry_date || '').trim();
+
+                    // Add a simple status flag for filtering later if needed
+                    // A card is considered 'valid' if at least one key field is extracted
+                    data.isValid = data.identifier.length === 15 || data.barcode_number.length === 17 || data.expiry_date.length > 0;
+                    return data;
+                }).filter(card => card.isValid); // Only keep cards where at least one field was found
+
                 // Update state and display
-                extractedData = data;
-                displayIdentifier.textContent = data.identifier || 'N/A';
-                displayBarcode.textContent = data.barcode_number || 'N/A';
-                displayDate.textContent = data.expiry_date || 'N/A';
+                extractedData = validatedCards; // extractedData is now an array
+                const cardCount = extractedData.length;
                 
-                // Enable save only if we have at least one valid number and a date
-                if (data.identifier.length === 15 || data.barcode_number.length === 17 || data.expiry_date.length > 0) {
+                displayCardCount.textContent = `${cardCount}`;
+
+                if (cardCount > 0) {
                     saveExtractedButton.disabled = false;
+                    saveCountSpan.textContent = cardCount;
+                    displayStatus.textContent = `Found and validated ${cardCount} card(s). Ready to save them all.`;
+                    alertMessage("Success", `Found and validated ${cardCount} card(s). Ready to save.`);
                 } else {
-                    alertMessage("No Data Found", "Could not extract any valid data points.");
+                    displayStatus.textContent = 'No valid card data was extracted.';
+                    alertMessage("No Data Found", "Could not extract any valid card data from the image.");
                 }
 
             } catch (e) {
@@ -570,7 +534,7 @@
                 displayError("Failed to extract data. Check console for details.");
             } finally {
                 processImageButton.disabled = false;
-                processImageButton.textContent = '2. Extract 3 Fields (Identifier, Barcode, Date)';
+                processImageButton.textContent = '2. Extract ALL Cards (Identifier, Barcode, Date)';
                 hideLoading();
             }
         }
@@ -590,54 +554,61 @@
             return collection(db, path);
         }
         
-        // Function to save all extracted numbers to Firestore
+        // Function to save all extracted numbers to Firestore (now handles an array)
         window.saveExtractedNumbers = async function() {
-            if (!extractedData) {
-                alertMessage("No Data", "No data was extracted to save.");
+            if (!extractedData || extractedData.length === 0) {
+                alertMessage("No Data", "No cards were extracted to save.");
                 return;
             }
             
-            // Check if Firebase is initialized
             if (!db) {
                 displayError("Database is not configured. Cannot save data.");
                 return;
             }
             
+            const cardCount = extractedData.length;
+            
             saveExtractedButton.disabled = true;
-            saveExtractedButton.textContent = `Saving data...`;
-            showLoading(`Saving extracted data to Firestore...`);
+            saveExtractedButton.textContent = `Saving ${cardCount} card(s)...`;
+            showLoading(`Saving ${cardCount} extracted cards to Firestore...`);
 
             try {
-                // Combine extracted data with device metadata
-                const dataToSave = {
-                    identifier: extractedData.identifier,
-                    barcode_number: extractedData.barcode_number,
-                    expiry_date: extractedData.expiry_date,
-                    
-                    // --- SECURITY/AUDITING FIELDS ---
-                    device_user_agent: deviceMetadata.userAgent,
-                    device_resolution: deviceMetadata.screenResolution,
-                    // ------------------------------------
-
-                    timestamp: serverTimestamp(),
-                    user: userId
-                };
-
                 const collectionRef = getCollectionRef();
                 if (!collectionRef) return;
                 
-                await addDoc(collectionRef, dataToSave);
+                let docsSaved = 0;
+                
+                // Loop through the array of extracted cards and save each one as a separate document
+                for (const card of extractedData) {
+                    const dataToSave = {
+                        identifier: card.identifier,
+                        barcode_number: card.barcode_number,
+                        expiry_date: card.expiry_date,
+                        
+                        // --- SECURITY/AUDITING FIELDS ---
+                        device_user_agent: deviceMetadata.userAgent,
+                        device_resolution: deviceMetadata.screenResolution,
+                        // ------------------------------------
+
+                        timestamp: serverTimestamp(),
+                        user: userId
+                    };
+
+                    await addDoc(collectionRef, dataToSave);
+                    docsSaved++;
+                }
                 
                 extractedData = null; // Clear state after saving
                 resetDisplay();
-                alertMessage("Success", `Successfully saved the data.`);
+                alertMessage("Success", `Successfully saved ${docsSaved} document(s).`);
 
             } catch (e) {
-                console.error("Error adding document: ", e);
+                console.error("Error adding documents: ", e);
                 displayError("Could not save the data to the database. Check Firestore Rules!");
             } finally {
                 saveExtractedButton.disabled = true;
-                saveExtractedButton.textContent = 'Save Data to Firestore';
+                saveCountSpan.textContent = '0';
+                saveExtractedButton.innerHTML = `<svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7H5a2 2 0 00-2 2v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3-3m0 0l-3 3m3-3v8"></path></svg>Save <span id="save-count">0</span> Card(s) to Firestore`;
                 hideLoading();
             }
         }
@@ -754,7 +725,7 @@
             exportButton.disabled = recordedData.length === 0;
         }
 
-        // --- CSV GENERATION (Moved to a separate function) ---
+        // --- CSV GENERATION ---
         function generateCSV() {
             if (recordedData.length === 0) return '';
 
@@ -771,12 +742,13 @@
             let csv = headers.join(',') + '\n';
 
             recordedData.forEach(item => {
+                // Ensure data is wrapped in quotes to handle commas/special characters if any exist
                 const identifier = `"${item.identifier || ''}"`;
                 const barcode = `"${item.barcode_number || ''}"`;
                 const date = `"${item.expiry_date || ''}"`;
                 const timestamp = `"${item.timestamp.toISOString()}"`;
                 // DEVICE FIELDS
-                const userAgent = `"${item.device_user_agent || ''}"`;
+                const userAgent = `"${item.device_user_agent.replace(/"/g, '""') || ''}"`; // Escape double quotes within field
                 const resolution = `"${item.device_resolution || ''}"`;
 
                 const recordId = `"${item.id}"`;
@@ -786,66 +758,16 @@
             return csv;
         }
 
-        // --- NEW MODAL FUNCTIONS ---
+        // --- DIRECT DOWNLOAD FUNCTION (Updated) ---
 
-        // 1. Show Preview Modal
-        window.showCSVPreview = function() {
-            if (recordedData.length === 0) {
-                alertMessage("Export Error", "No data to preview.");
-                return;
-            }
-
-            // Generate CSV string once and store it
-            currentCSVString = generateCSV();
-            
-            // Set content in the modal display area
-            csvContentDisplay.textContent = currentCSVString;
-            
-            // Show the modal
-            csvModal.classList.remove('hidden');
-            // Add a slight delay for smoother animation effect (optional)
-            setTimeout(() => csvModal.style.opacity = '1', 10);
-        }
-
-        // 2. Close Modal
-        window.closeCSVModal = function() {
-            csvModal.classList.add('hidden');
-            csvModal.style.opacity = '0';
-        }
-
-        // 3. Copy to Clipboard (The preferred mobile interaction)
-        window.copyCSVToClipboard = function() {
-            if (!currentCSVString) {
-                alertMessage("Copy Error", "No data generated to copy.");
-                return;
-            }
-
-            // Fallback for secure copy in iFrame/browser environment
-            try {
-                // Use execCommand('copy') which is more reliable in various sandbox environments (like Canvas)
-                const textArea = document.createElement("textarea");
-                textArea.value = currentCSVString;
-                textArea.style.position = "fixed";  // Prevents scrolling to bottom
-                textArea.style.top = "0";
-                textArea.style.left = "0";
-                textArea.style.opacity = "0";
-                document.body.appendChild(textArea);
-                textArea.focus();
-                textArea.select();
-                
-                document.execCommand('copy');
-                document.body.removeChild(textArea);
-                alertMessage("Success", "CSV data successfully copied to clipboard!");
-            } catch (err) {
-                console.error('Copy to clipboard failed:', err);
-                alertMessage("Copy Error", "Failed to copy data. Please try the download option.");
-            }
-        }
-
-        // 4. Trigger Download (The original action, now secondary)
+        /**
+         * Generates the CSV from recorded data and immediately triggers a file download.
+         */
         window.triggerCSVDownload = function() {
+            const currentCSVString = generateCSV();
+
             if (!currentCSVString) {
-                alertMessage("Download Error", "No data to download.");
+                alertMessage("Download Error", "No data recorded yet to download.");
                 return;
             }
             
@@ -857,11 +779,15 @@
             const dateStamp = new Date().toISOString().slice(0, 10);
             link.setAttribute("download", `ExtractedCardData_Export_${dateStamp}.csv`);
             
+            // Trigger download
             document.body.appendChild(link);
             link.click();
             document.body.removeChild(link);
+            
+            // Clean up the object URL
+            setTimeout(() => URL.revokeObjectURL(url), 100);
 
-            closeCSVModal(); // Close modal after initiating download
+            alertMessage("Success", "CSV file download initiated!");
         }
         
     </script>
