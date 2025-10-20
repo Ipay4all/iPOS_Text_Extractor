@@ -50,7 +50,7 @@
 
         <!-- Input Form (Image-Based) -->
         <div class="flex flex-col gap-4 mb-8 p-4 border rounded-xl bg-emerald-50 shadow-inner">
-            <h3 class="text-2xl font-bold text-emerald-700">1. Capture Image with Camera</h3>
+            <h3 class="text-2xl font-bold text-emerald-700">Step 1 - Capture Image with Camera</h3>
             
             <!-- File Input (accepts camera capture - KEY FOR MOBILE) -->
             <label for="image-file-input" class="cursor-pointer bg-white hover:bg-gray-50 text-emerald-700 font-semibold py-3 px-6 rounded-lg border border-emerald-300 shadow-md transition duration-150 flex items-center justify-center space-x-2">
@@ -121,7 +121,6 @@
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { 
             getAuth, 
-            signInAnonymously, 
             signInWithCustomToken, 
             onAuthStateChanged 
         } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
@@ -285,43 +284,42 @@
                                    ? crypto.randomUUID() 
                                    : 'fallback-' + Math.random().toString(36).substring(2, 15);
 
-            // Function to attempt authentication
-            const attemptAuth = async () => {
-                if (initialAuthToken) {
-                    // Try Custom Token (Canvas default)
-                    return signInWithCustomToken(auth, initialAuthToken);
-                } else {
-                    // Try Anonymous Sign In (External or Dev fallback)
-                    return signInAnonymously(auth);
-                }
-            };
             
             // Set up Auth State Listener
             onAuthStateChanged(auth, async (user) => {
                 if (user) {
-                    // Successful login via token or anonymous sign-in
+                    // Successful login via token
                     userId = user.uid;
-                    document.getElementById('user-id').textContent = `${userId} (${initialAuthToken ? 'Custom Token' : 'Anonymous'})`;
+                    document.getElementById('user-id').textContent = `${userId} (Authenticated)`;
                     console.log("Authentication successful, user ID set:", userId);
                     hideLoading();
                     setupRealtimeListener();
                     resetDisplay();
                 } else {
-                    // If no user is logged in, attempt the login
-                    try {
-                        await attemptAuth();
-                        // If successful, the listener will fire again with a 'user' object.
-                    } catch (error) {
-                        // Authentication failed 
-                        console.error("Critical Authentication Failed:", error);
-                        
-                        // Provide the specific fix instruction
-                        displayError(`Authentication Failed! You must enable the 'Identity Toolkit API' in your Google Cloud Project console (Project ID: ${firebaseConfig.projectId}) to use Anonymous sign-in.`);
-                        
-                        // Fallback: Proceed with a non-authenticated placeholder user ID
+                    // If no user is logged in, attempt login if token exists, or fall back immediately.
+                    if (initialAuthToken) {
+                        try {
+                            // Try Custom Token (Canvas default)
+                            await signInWithCustomToken(auth, initialAuthToken);
+                            // If successful, the listener will fire again with a 'user' object.
+                        } catch (error) {
+                            // Custom token failed
+                            console.error("Custom Token Authentication Failed:", error);
+                            
+                            // Fallback: Proceed with a non-authenticated placeholder user ID
+                            userId = fallbackUserId;
+                            document.getElementById('user-id').textContent = `${userId} (CUSTOM TOKEN FAILED FALLBACK)`;
+                            displayError(`Custom Token authentication failed. Proceeding with unauthenticated ID. Error: ${error.message}`);
+
+                            hideLoading();
+                            setupRealtimeListener();
+                            resetDisplay();
+                        }
+                    } else {
+                        // **FIX: Bypass the Anonymous sign-in attempt entirely to avoid the GCloud API error.**
+                        console.warn("No Custom Auth Token provided. Bypassing Anonymous sign-in attempt to avoid external configuration errors.");
                         userId = fallbackUserId;
                         document.getElementById('user-id').textContent = `${userId} (UNAUTHENTICATED FALLBACK)`;
-                        console.warn("Proceeding with UNAUTHENTICATED FALLBACK ID. Firestore operations may still fail if security rules require an authenticated user.");
 
                         hideLoading();
                         setupRealtimeListener();
@@ -335,7 +333,6 @@
 
         } catch (error) {
             console.error("Firebase initialization failed:", error);
-            // This error now means the config keys themselves are wrong, or the Firebase project is not set up correctly.
             displayError("Failed to initialize Firebase. Check your configuration keys and project setup.");
         }
         
@@ -359,6 +356,7 @@
         }
 
         function alertMessage(title, message) {
+            // Using the same error box for alerts but with a shorter display time
             errorDiv.innerHTML = `<strong>${title}:</strong> ${message}`;
             errorDiv.classList.remove('hidden');
             setTimeout(() => {
