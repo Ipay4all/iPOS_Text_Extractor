@@ -50,7 +50,7 @@
 
         <!-- Input Form (Image-Based) -->
         <div class="flex flex-col gap-4 mb-8 p-4 border rounded-xl bg-emerald-50 shadow-inner">
-            <h3 class="text-2xl font-bold text-emerald-700">Step 1 - Capture Image with Camera</h3>
+            <h3 class="text-2xl font-bold text-emerald-700">1. Capture Image with Camera</h3>
             
             <!-- File Input (accepts camera capture - KEY FOR MOBILE) -->
             <label for="image-file-input" class="cursor-pointer bg-white hover:bg-gray-50 text-emerald-700 font-semibold py-3 px-6 rounded-lg border border-emerald-300 shadow-md transition duration-150 flex items-center justify-center space-x-2">
@@ -88,7 +88,7 @@
             <button id="save-extracted-button" onclick="saveExtractedNumbers()" disabled
                     class="w-full mt-4 bg-blue-500 hover:bg-blue-600 text-white font-semibold py-3 rounded-lg shadow-md transition duration-150 disabled:bg-gray-400 flex items-center justify-center">
                 <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7H5a2 2 0 00-2 2v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3-3m0 0l-3 3m3-3v8"></path></svg>
-                Save <span id="save-count">0</span> Card(s) to Firestore
+                Save <span id="save-count">0</span> Card(s) as Separate Records
             </button>
         </div>
 
@@ -139,7 +139,7 @@
         // ====================================================================================
         // 1. GEMINI API KEY (Used for image processing)
         // ====================================================================================
-        const apiKey = "AIzaSyCA4MpL1N3GpJohJbc6zbjb6C4cEEvqUI0"; // NOTE: Left blank as per instruction for platform injection.
+        const apiKey = ""; // NOTE: Left blank as per instruction for platform injection.
 
         // --- GLOBAL VARIABLES (MANDATORY Canvas Environment Checks) ---
         // MANDATORY: Check for __app_id or use fallback
@@ -520,7 +520,8 @@
                 if (cardCount > 0) {
                     saveExtractedButton.disabled = false;
                     saveCountSpan.textContent = cardCount;
-                    displayStatus.textContent = `Found and validated ${cardCount} card(s). Ready to save them all.`;
+                    // UPDATED MESSAGE for clarity
+                    displayStatus.textContent = `Found and validated ${cardCount} card(s). Each card will be saved as a separate record.`;
                     alertMessage("Success", `Found and validated ${cardCount} card(s). Ready to save.`);
                 } else {
                     displayStatus.textContent = 'No valid card data was extracted.';
@@ -576,7 +577,7 @@
                 
                 let docsSaved = 0;
                 
-                // Loop through the array of extracted cards and save each one as a separate document
+                // CRUCIAL LOGIC: Loop through the array of extracted cards and save each one as a separate document
                 for (const card of extractedData) {
                     const dataToSave = {
                         identifier: card.identifier,
@@ -592,6 +593,7 @@
                         user: userId
                     };
 
+                    // addDoc creates a NEW document for EACH card, ensuring multiple records are saved.
                     await addDoc(collectionRef, dataToSave);
                     docsSaved++;
                 }
@@ -606,7 +608,8 @@
             } finally {
                 saveExtractedButton.disabled = true;
                 saveCountSpan.textContent = '0';
-                saveExtractedButton.innerHTML = `<svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7H5a2 2 0 00-2 2v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3-3m0 0l-3 3m3-3v8"></path></svg>Save <span id="save-count">0</span> Card(s) to Firestore`;
+                // UPDATED BUTTON TEXT for clarity
+                saveExtractedButton.innerHTML = `<svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7H5a2 2 0 00-2 2v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3-3m0 0l-3 3m3-3v8"></path></svg>Save <span id="save-count">0</span> Card(s) as Separate Records`;
                 hideLoading();
             }
         }
