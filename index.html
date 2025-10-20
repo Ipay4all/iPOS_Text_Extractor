@@ -1,0 +1,621 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Multi-Field Identifier Extractor</title>
+    <!-- Load Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Custom scrollbar styling for better aesthetics */
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 8px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background-color: #a7f3d0; /* emerald-200 */
+            border-radius: 4px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background-color: #f3f4f6; /* gray-100 */
+        }
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+    </style>
+</head>
+<body class="bg-gray-50 min-h-screen flex items-center justify-center p-4">
+
+    <div id="app-container" class="bg-white shadow-2xl rounded-xl w-full max-w-4xl p-6 md:p-10 transition-all duration-300">
+        <h1 class="4xl font-extrabold text-emerald-600 mb-2">Multi-Field Identifier Extractor</h1>
+        
+        <!-- User/Auth Info -->
+        <div class="mb-6 bg-emerald-50 p-3 rounded-lg text-sm text-emerald-800">
+            <p><strong>App ID:</strong> <span id="app-id">...</span></p>
+            <p><strong>User ID:</strong> <span id="user-id">Authenticating...</span></p>
+            <p class="mt-1">Data is stored privately under this User ID.</p>
+        </div>
+        
+        <!-- Loading and Error Display -->
+        <div id="error-message" class="text-center py-4 text-red-600 bg-red-100 rounded-lg hidden mb-4"></div>
+
+
+        <!-- Input Form (Image-Based) -->
+        <div class="flex flex-col gap-4 mb-8 p-4 border rounded-xl bg-emerald-50 shadow-inner">
+            <h3 class="text-2xl font-bold text-emerald-700">1. Capture Image with Camera</h3>
+            
+            <!-- File Input (accepts camera capture - KEY FOR MOBILE) -->
+            <label for="image-file-input" class="cursor-pointer bg-white hover:bg-gray-50 text-emerald-700 font-semibold py-3 px-6 rounded-lg border border-emerald-300 shadow-md transition duration-150 flex items-center justify-center space-x-2">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.808-1.212A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.808 1.212a2 2 0 001.664.89H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
+                <span>Tap to Open Camera or Select File</span>
+            </label>
+            <input type="file" id="image-file-input" accept="image/*" capture="camera" 
+                   class="hidden">
+            
+            <!-- Image Preview -->
+            <div id="image-preview-container" class="mt-2 hidden bg-gray-100 p-2 rounded-lg">
+                <img id="image-preview" class="max-w-full h-auto rounded-lg shadow-lg max-h-64 object-contain mx-auto transition-opacity duration-300" alt="Image Preview">
+            </div>
+
+            <button id="process-image-button" onclick="processImageForNumbers()" disabled
+                    class="bg-emerald-500 hover:bg-emerald-600 text-white font-semibold py-3 px-6 rounded-lg shadow-md transition duration-150 disabled:bg-gray-400 flex items-center justify-center">
+                2. Extract 3 Fields (Identifier, Barcode, Date)
+            </button>
+        </div>
+
+        <!-- Extracted Data Area -->
+        <div id="extraction-result-area" class="mt-6 mb-8 p-4 border rounded-xl bg-gray-100 shadow-md">
+            <h3 class="2xl font-bold text-gray-700 mb-3">3. Extracted Data Ready to Save</h3>
+            <div id="extracted-display" class="min-h-[50px] p-3 bg-white border border-dashed border-gray-300 rounded-lg text-gray-600 whitespace-pre-wrap text-sm font-mono break-all space-y-2">
+                <p><strong>Identifier (15-digit):</strong> <span id="display-identifier" class="font-mono text-gray-800">---</span></p>
+                <p><strong>Barcode (17-digit):</strong> <span id="display-barcode" class="font-mono text-gray-800">---</span></p>
+                <p><strong>Expiry Date (DD/MM/YY):</strong> <span id="display-date" class="font-mono text-gray-800">---</span></p>
+            </div>
+            
+            <button id="save-extracted-button" onclick="saveExtractedNumbers()" disabled
+                    class="w-full mt-4 bg-blue-500 hover:bg-blue-600 text-white font-semibold py-3 rounded-lg shadow-md transition duration-150 disabled:bg-gray-400 flex items-center justify-center">
+                <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7H5a2 2 0 00-2 2v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3-3m0 0l-3 3m3-3v8"></path></svg>
+                Save Data to Firestore
+            </button>
+        </div>
+
+
+        <!-- Action and Status Area -->
+        <div class="flex justify-between items-center mb-6 border-t pt-4">
+            <h2 class="text-2xl font-bold text-gray-700">Recorded Data (<span id="count">0</span>)</h2>
+            <button id="export-button" onclick="exportToCSV()" disabled
+                    class="bg-gray-500 hover:bg-gray-600 text-white font-medium py-2 px-4 rounded-lg shadow-md transition duration-150 disabled:bg-gray-400 flex items-center">
+                    <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+                Export to CSV
+            </button>
+        </div>
+
+        <!-- Loading Indicator for Firestore & API -->
+        <div id="loading-indicator" class="text-center py-8 text-emerald-500 hidden">
+            <svg class="animate-spin h-5 w-5 mr-3 inline-block" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+            <span id="loading-message">Initializing...</span>
+        </div>
+
+
+        <!-- Data List -->
+        <div id="numbers-list-container" class="bg-gray-100 p-4 rounded-lg max-h-96 overflow-y-auto custom-scrollbar border-t">
+            <ul id="numbers-list" class="space-y-3">
+                <li id="empty-state" class="text-gray-500 text-center py-4">No data recorded yet.</li>
+            </ul>
+        </div>
+    </div>
+
+    <!-- Firebase Imports and Logic -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { 
+            getAuth, 
+            signInAnonymously, 
+            signInWithCustomToken, 
+            onAuthStateChanged 
+        } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { 
+            getFirestore, 
+            collection, 
+            query, 
+            addDoc, 
+            onSnapshot,
+            serverTimestamp
+        } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // --- GLOBAL CONSTANTS ---
+        const API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent';
+        const apiKey = ""; // API key will be provided by Canvas runtime
+
+        // --- GLOBAL VARIABLES (Provided by Canvas) ---
+        // NOTE: These variables are expected to be injected by the deployment environment (e.g., Canvas).
+        // For local development, they must be manually defined or handled.
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+        const firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{}');
+        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+        
+        // --- APP STATE ---
+        let app;
+        let db;
+        let auth;
+        let userId = null;
+        let recordedData = []; 
+        let extractedData = null; 
+
+        // --- DOM ELEMENTS ---
+        const imageFileInput = document.getElementById('image-file-input');
+        const imagePreview = document.getElementById('image-preview');
+        const imagePreviewContainer = document.getElementById('image-preview-container');
+        const processImageButton = document.getElementById('process-image-button');
+        const saveExtractedButton = document.getElementById('save-extracted-button');
+        const exportButton = document.getElementById('export-button');
+        const numbersList = document.getElementById('numbers-list');
+        const emptyState = document.getElementById('empty-state');
+        const countSpan = document.getElementById('count');
+        const loadingIndicator = document.getElementById('loading-indicator');
+        const loadingMessage = document.getElementById('loading-message');
+        const errorDiv = document.getElementById('error-message');
+        
+        const displayIdentifier = document.getElementById('display-identifier');
+        const displayBarcode = document.getElementById('display-barcode');
+        const displayDate = document.getElementById('display-date');
+
+        // Display initial IDs
+        document.getElementById('app-id').textContent = appId;
+        
+        // Attach event listener for initial image selection
+        imageFileInput.addEventListener('change', (e) => handleImageSelection(e));
+        
+        // Initial Display Reset
+        function resetDisplay() {
+            displayIdentifier.textContent = '---';
+            displayBarcode.textContent = '---';
+            displayDate.textContent = '---';
+            saveExtractedButton.disabled = true;
+            extractedData = null;
+        }
+
+        // -------------------------------------------------------------------
+        // 1. FIREBASE INITIALIZATION AND AUTHENTICATION
+        // -------------------------------------------------------------------
+
+        if (Object.keys(firebaseConfig).length > 0) {
+            try {
+                app = initializeApp(firebaseConfig);
+                db = getFirestore(app);
+                auth = getAuth(app);
+                
+                showLoading("Initializing Firebase...");
+
+                onAuthStateChanged(auth, async (user) => {
+                    if (!user) {
+                        try {
+                            if (initialAuthToken) {
+                                await signInWithCustomToken(auth, initialAuthToken);
+                            } else {
+                                await signInAnonymously(auth);
+                            }
+                            user = auth.currentUser;
+                        } catch (error) {
+                            console.error("Authentication failed:", error);
+                            displayError("Failed to authenticate. Check console for details.");
+                            return;
+                        }
+                    }
+                    
+                    // Once authenticated, set state and start listening
+                    userId = user.uid;
+                    document.getElementById('user-id').textContent = userId;
+                    processImageButton.disabled = imageFileInput.files.length === 0;
+                    hideLoading();
+                    setupRealtimeListener();
+                    resetDisplay(); // Reset on successful auth
+                });
+
+            } catch (error) {
+                console.error("Firebase initialization failed:", error);
+                displayError("Failed to initialize Firebase. Please check the console.");
+            }
+        } else {
+            // This is acceptable for local testing where environment variables might not be set
+            console.warn("Firebase configuration is missing. Data saving will not work.");
+            userId = crypto.randomUUID(); // Fallback for UI display
+            document.getElementById('user-id').textContent = userId + " (Local)";
+            processImageButton.disabled = imageFileInput.files.length === 0;
+            hideLoading();
+            resetDisplay();
+        }
+        
+        // Utility Functions
+        function showLoading(message) {
+            loadingMessage.textContent = message;
+            loadingIndicator.classList.remove('hidden');
+        }
+
+        function hideLoading() {
+            loadingIndicator.classList.add('hidden');
+        }
+
+        function displayError(message) {
+            errorDiv.innerHTML = `<strong>Error:</strong> ${message}`;
+            errorDiv.classList.remove('hidden');
+            hideLoading();
+            setTimeout(() => {
+                errorDiv.classList.add('hidden');
+            }, 5000);
+        }
+
+        function alertMessage(title, message) {
+            errorDiv.innerHTML = `<strong>${title}:</strong> ${message}`;
+            errorDiv.classList.remove('hidden');
+            setTimeout(() => {
+                errorDiv.classList.add('hidden');
+            }, 5000);
+        }
+
+        // -------------------------------------------------------------------
+        // 2. IMAGE HANDLING AND PREPROCESSING
+        // -------------------------------------------------------------------
+        
+        function handleImageSelection(event) {
+            const file = event.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    imagePreview.src = e.target.result;
+                    imagePreviewContainer.classList.remove('hidden');
+                    processImageButton.disabled = false;
+                    resetDisplay(); // Reset fields when a new image is loaded
+                };
+                reader.readAsDataURL(file);
+            } else {
+                imagePreviewContainer.classList.add('hidden');
+                imagePreview.src = '';
+                processImageButton.disabled = true;
+                resetDisplay();
+            }
+        }
+        
+        function toBase64(file) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.readAsDataURL(file);
+                reader.onload = () => {
+                    const base64String = reader.result.split(',')[1];
+                    resolve(base64String);
+                };
+                reader.onerror = error => reject(error);
+            });
+        }
+
+        // -------------------------------------------------------------------
+        // 3. GEMINI API CALL FOR STRUCTURED EXTRACTION (JSON)
+        // -------------------------------------------------------------------
+
+        const structuredResponseSchema = {
+            type: "OBJECT",
+            properties: {
+                "identifier": { "type": "STRING", "description": "The 15-digit code from the top of the card (e.g., 272290114421700), without spaces." },
+                "barcode_number": { "type": "STRING", "description": "The 17-digit number associated with the barcode (e.g., 13194124008710000), without spaces." },
+                "expiry_date": { "type": "STRING", "description": "The expiration date in DD/MM/YY format (e.g., 03/12/24, meaning 3rd December 2024)." }
+            },
+            propertyOrdering: ["identifier", "barcode_number", "expiry_date"]
+        };
+
+        const systemPrompt = "You are a specialized data extraction bot. Your task is to analyze the provided image of a card and extract exactly three specific pieces of information as a valid JSON object. For numbers, provide only the raw digits, no spaces. For the date, provide the DD/MM/YY format. If a value is not found, use an empty string for that field.";
+        const userQuery = "Extract the 15-digit identifier from the top, the 17-digit barcode number, and the expiry date (DD/MM/YY).";
+
+
+        window.processImageForNumbers = async function() {
+            const file = imageFileInput.files[0];
+            if (!file) return alertMessage("Missing Image", "Please capture or select an image first.");
+
+            processImageButton.disabled = true;
+            resetDisplay();
+            showLoading("Analyzing image and extracting structured data...");
+
+            try {
+                const base64ImageData = await toBase64(file);
+                
+                const payload = {
+                    contents: [
+                        {
+                            role: "user",
+                            parts: [
+                                { text: userQuery },
+                                {
+                                    inlineData: {
+                                        mimeType: file.type,
+                                        data: base64ImageData
+                                    }
+                                }
+                            ]
+                        }
+                    ],
+                    systemInstruction: { parts: [{ text: systemPrompt }] },
+                    generationConfig: {
+                        responseMimeType: "application/json",
+                        responseSchema: structuredResponseSchema
+                    }
+                };
+
+                let response;
+                let lastError = null;
+                const maxRetries = 3;
+                
+                // Implement exponential backoff for API call
+                for (let i = 0; i < maxRetries; i++) {
+                    try {
+                        response = await fetch(`${API_URL}?key=${apiKey}`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(payload)
+                        });
+
+                        if (!response.ok) {
+                            throw new Error(`HTTP error! status: ${response.status}`);
+                        }
+                        break; // Exit loop on success
+                    } catch (error) {
+                        lastError = error;
+                        if (i < maxRetries - 1) {
+                            const delay = Math.pow(2, i) * 1000;
+                            await new Promise(resolve => setTimeout(resolve, delay));
+                        } else {
+                            throw lastError; // Throw final error
+                        }
+                    }
+                }
+                
+                const result = await response.json();
+                const jsonText = result?.candidates?.[0]?.content?.parts?.[0]?.text;
+                
+                if (!jsonText) {
+                    throw new Error("AI returned no content.");
+                }
+
+                // Parse and validate the JSON response
+                const data = JSON.parse(jsonText);
+                
+                // Basic data cleaning and validation
+                data.identifier = (data.identifier || '').replace(/[^0-9]/g, '').trim();
+                data.barcode_number = (data.barcode_number || '').replace(/[^0-9]/g, '').trim();
+                data.expiry_date = (data.expiry_date || '').trim();
+
+                let validationError = null;
+                if (data.identifier.length > 0 && data.identifier.length !== 15) {
+                    validationError = `Identifier expected 15 digits, found ${data.identifier.length}.`;
+                }
+                if (data.barcode_number.length > 0 && data.barcode_number.length !== 17) {
+                    validationError = validationError ? validationError + " " : "";
+                    validationError += `Barcode expected 17 digits, found ${data.barcode_number.length}.`;
+                }
+                // Date format validation is flexible, checking for content
+                if (!data.expiry_date) {
+                     validationError = validationError ? validationError + " " : "";
+                     validationError += `Expiry Date not found.`;
+                }
+
+                if (validationError) {
+                    displayError(validationError);
+                    alertMessage("Validation Error", validationError);
+                }
+                
+                // Update state and display
+                extractedData = data;
+                displayIdentifier.textContent = data.identifier || 'N/A';
+                displayBarcode.textContent = data.barcode_number || 'N/A';
+                displayDate.textContent = data.expiry_date || 'N/A';
+                
+                // Enable save only if we have at least one valid number and a date
+                if (data.identifier.length === 15 || data.barcode_number.length === 17 || data.expiry_date.length > 0) {
+                    saveExtractedButton.disabled = false;
+                } else {
+                    alertMessage("No Data Found", "Could not extract any valid data points.");
+                }
+
+            } catch (e) {
+                console.error("API or processing error: ", e);
+                displayError("Failed to extract data. Check console for details.");
+            } finally {
+                processImageButton.disabled = false;
+                processImageButton.textContent = '2. Extract 3 Fields (Identifier, Barcode, Date)';
+                hideLoading();
+            }
+        }
+
+        // -------------------------------------------------------------------
+        // 4. FIRESTORE OPERATIONS
+        // -------------------------------------------------------------------
+
+        // Helper to get the correct collection path
+        function getCollectionRef() {
+            if (!db || !userId) {
+                console.error("Firestore or User ID is not ready.");
+                return null;
+            }
+            // Private collection path: /artifacts/{appId}/users/{userId}/{collectionName}
+            const path = `artifacts/${appId}/users/${userId}/extracted_card_data`; // Updated collection name
+            return collection(db, path);
+        }
+        
+        // Function to save all extracted numbers to Firestore
+        window.saveExtractedNumbers = async function() {
+            if (!extractedData) {
+                alertMessage("No Data", "No data was extracted to save.");
+                return;
+            }
+            
+            // Check if Firebase is initialized before attempting save
+            if (!db) {
+                alertMessage("Database Error", "Database is not configured. Cannot save data locally.");
+                return;
+            }
+
+            saveExtractedButton.disabled = true;
+            saveExtractedButton.textContent = `Saving data...`;
+            showLoading(`Saving extracted data to Firestore...`);
+
+            try {
+                const dataToSave = {
+                    identifier: extractedData.identifier,
+                    barcode_number: extractedData.barcode_number,
+                    expiry_date: extractedData.expiry_date,
+                    timestamp: serverTimestamp(),
+                    user: userId
+                };
+
+                const collectionRef = getCollectionRef();
+                if (!collectionRef) return;
+                
+                await addDoc(collectionRef, dataToSave);
+                
+                extractedData = null; // Clear state after saving
+                resetDisplay();
+                alertMessage("Success", `Successfully saved the data.`);
+
+            } catch (e) {
+                console.error("Error adding document: ", e);
+                displayError("Could not save the data to the database.");
+            } finally {
+                saveExtractedButton.disabled = true;
+                saveExtractedButton.textContent = 'Save Data to Firestore';
+                hideLoading();
+            }
+        }
+
+        // Function to set up the real-time listener for the data
+        function setupRealtimeListener() {
+            if (!db) return; // Skip if database isn't configured
+
+            const collectionRef = getCollectionRef();
+            if (!collectionRef) return;
+
+            const q = query(collectionRef);
+
+            onSnapshot(q, (snapshot) => {
+                hideLoading();
+                
+                recordedData = [];
+                
+                snapshot.forEach((doc) => {
+                    const data = doc.data();
+                    recordedData.push({
+                        id: doc.id,
+                        identifier: data.identifier,
+                        barcode_number: data.barcode_number,
+                        expiry_date: data.expiry_date,
+                        timestamp: data.timestamp ? data.timestamp.toDate() : new Date()
+                    });
+                });
+                
+                // Sort by timestamp descending (newest first)
+                recordedData.sort((a, b) => b.timestamp - a.timestamp);
+
+                renderData();
+                updateExportButtonState();
+            }, (error) => {
+                console.error("Error listening to Firestore:", error);
+                hideLoading();
+                displayError("Real-time data failed to load. Check console.");
+            });
+        }
+
+        // -------------------------------------------------------------------
+        // 5. UI RENDERING AND EXPORT
+        // -------------------------------------------------------------------
+
+        // Function to render the list of numbers
+        function renderData() {
+            numbersList.innerHTML = '';
+            countSpan.textContent = recordedData.length;
+
+            if (recordedData.length === 0) {
+                numbersList.appendChild(emptyState);
+                emptyState.classList.remove('hidden');
+                return;
+            }
+            emptyState.classList.add('hidden');
+
+            recordedData.forEach(item => {
+                const li = document.createElement('li');
+                li.className = 'flex flex-col md:flex-row md:justify-between items-start md:items-center bg-white p-4 rounded-xl shadow-sm border border-gray-200 hover:shadow-md transition duration-150 space-y-2 md:space-y-0';
+
+                // Format the 15-digit code for readability (5-5-5)
+                const rawIdentifier = String(item.identifier || 'N/A');
+                const displayIdentifierFormatted = rawIdentifier.length === 15 
+                    ? rawIdentifier.slice(0, 5) + ' ' + rawIdentifier.slice(5, 10) + ' ' + rawIdentifier.slice(10)
+                    : rawIdentifier;
+                    
+                // Format the 17-digit code for readability (5-5-5-2) - Adjust as needed
+                const rawBarcode = String(item.barcode_number || 'N/A');
+                const displayBarcodeFormatted = rawBarcode.length > 5 
+                    ? rawBarcode.slice(0, 5) + ' ' + rawBarcode.slice(5, 10) + ' ' + rawBarcode.slice(10, 15) + ' ' + rawBarcode.slice(15)
+                    : rawBarcode;
+
+
+                const formattedTime = item.timestamp.toLocaleString('en-US', {
+                    month: 'short', day: 'numeric',
+                    hour: '2-digit', minute: '2-digit'
+                });
+
+                li.innerHTML = `
+                    <div class="flex flex-col text-sm space-y-1">
+                        <p class="text-xs text-gray-400">ID / Barcode / Date</p>
+                        <p class="text-base font-mono text-gray-800">
+                            <span class="font-bold">${displayIdentifierFormatted}</span> | 
+                            <span>${displayBarcodeFormatted}</span> | 
+                            <span class="text-emerald-600">${item.expiry_date || 'N/A'}</span>
+                        </p>
+                    </div>
+                    <span class="text-xs text-gray-400 mt-2 md:mt-0">${formattedTime}</span>
+                `;
+                numbersList.appendChild(li);
+            });
+        }
+
+        function updateExportButtonState() {
+            exportButton.disabled = recordedData.length === 0;
+        }
+
+        // Function to convert data to CSV and trigger download
+        window.exportToCSV = function() {
+            if (recordedData.length === 0) {
+                alertMessage("Export Error", "No data to export.");
+                return;
+            }
+
+            exportButton.disabled = true;
+            exportButton.textContent = 'Preparing...';
+
+            const headers = ["Identifier (15-Digit)", "Barcode Number (17-Digit)", "Expiry Date (DD/MM/YY)", "Timestamp", "RecordID"];
+            let csv = headers.join(',') + '\n';
+
+            recordedData.forEach(item => {
+                const identifier = `"${item.identifier || ''}"`;
+                const barcode = `"${item.barcode_number || ''}"`;
+                const date = `"${item.expiry_date || ''}"`;
+                const timestamp = `"${item.timestamp.toISOString()}"`;
+                const recordId = `"${item.id}"`;
+                
+                csv += [identifier, barcode, date, timestamp, recordId].join(',') + '\n';
+            });
+
+            const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement("a");
+            const url = URL.createObjectURL(blob);
+            
+            link.setAttribute("href", url);
+            const dateStamp = new Date().toISOString().slice(0, 10);
+            link.setAttribute("download", `ExtractedCardData_Export_${dateStamp}.csv`);
+            
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            
+            exportButton.textContent = 'Export to CSV';
+            exportButton.disabled = false;
+        }
+
+    </script>
+</body>
+</html>
