@@ -33,7 +33,10 @@
         <div class="mb-6 bg-emerald-50 p-3 rounded-lg text-sm text-emerald-800">
             <p><strong>App ID:</strong> <span id="app-id">...</span></p>
             <p><strong>User ID:</strong> <span id="user-id">Authenticating...</span></p>
-            <p class="mt-1">Data is stored privately under this User ID.</p>
+            <!-- DEVICE INFO DISPLAY -->
+            <p class="mt-2 text-xs text-emerald-700 font-semibold">
+                Device Info (for Auditing): <span id="device-info-display" class="font-normal">Loading...</span>
+            </p>
         </div>
         
         <!-- Loading and Error Display -->
@@ -62,7 +65,7 @@
                 2. Extract 3 Fields (Identifier, Barcode, Date)
             </button>
             
-            <!-- Loading Indicator for Image Processing - MOVED HERE -->
+            <!-- Loading Indicator for Image Processing -->
             <div id="loading-indicator" class="text-center py-4 text-emerald-500 hidden border-t border-emerald-200 pt-4">
                 <svg class="animate-spin h-5 w-5 mr-3 inline-block" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
                 <span id="loading-message">Initializing...</span>
@@ -129,7 +132,7 @@
         // ====================================================================================
         // 1. GEMINI API KEY (Used for image processing)
         // ====================================================================================
-        const apiKey = "AIzaSyCA4MpL1N3GpJohJbc6zbjb6C4cEEvqUI0"; // NOTE: Should typically be left blank if relying on platform injection.
+        const apiKey = ""; // NOTE: Left blank as per instruction for platform injection.
 
         // --- GLOBAL VARIABLES (MANDATORY Canvas Environment Checks) ---
         // MANDATORY: Check for __app_id or use fallback
@@ -170,8 +173,8 @@
         let db;
         let auth;
         let userId = null;
-        let recordedData = []; // Renamed from recordedNumbers
-        let extractedData = null; // Holds the structured JSON result from the AI
+        let recordedData = []; 
+        let extractedData = null; 
 
         // --- DOM ELEMENTS ---
         const imageFileInput = document.getElementById('image-file-input');
@@ -186,6 +189,7 @@
         const loadingIndicator = document.getElementById('loading-indicator');
         const loadingMessage = document.getElementById('loading-message');
         const errorDiv = document.getElementById('error-message');
+        const deviceInfoDisplay = document.getElementById('device-info-display');
         
         const displayIdentifier = document.getElementById('display-identifier');
         const displayBarcode = document.getElementById('display-barcode');
@@ -205,6 +209,52 @@
             saveExtractedButton.disabled = true;
             extractedData = null;
         }
+        
+        // --- DEVICE METADATA ---
+        let deviceMetadata = {};
+
+        // Helper function to get a concise OS name from the User Agent
+        function getConciseOS(userAgent) {
+            if (userAgent.match(/Android (\d+(\.\d+)?)/i)) {
+                return 'Android ' + (userAgent.match(/Android (\d+(\.\d+)?)/i)[1] || '');
+            }
+            // Match iOS version (e.g., OS 17_0_3)
+            if (userAgent.match(/(iPhone|iPad).*OS (\d+_\d+)/i)) {
+                return 'iOS ' + (userAgent.match(/(iPhone|iPad).*OS (\d+_\d+)/i)[2] || '').replace(/_/g, '.');
+            }
+            // Match Windows version (e.g., Windows NT 10.0 for 10/11)
+            if (userAgent.match(/Windows NT (\d+\.\d+)/i)) {
+                const version = userAgent.match(/Windows NT (\d+\.\d+)/i)[1];
+                const versionMap = { '10.0': '10/11', '6.3': '8.1', '6.2': '8', '6.1': '7' };
+                return 'Windows ' + (versionMap[version] || 'PC');
+            }
+            if (userAgent.includes('Macintosh')) {
+                return 'macOS';
+            }
+            // Fallback for Linux, etc.
+            if (userAgent.includes('Linux')) {
+                return 'Linux';
+            }
+            return 'Unknown OS';
+        }
+
+        function captureDeviceMetadata() {
+            // Get User Agent (Device/OS/Browser Info)
+            const userAgent = navigator.userAgent;
+            
+            // Get Screen Resolution
+            const screenResolution = `${window.screen.width}x${window.screen.height}`;
+            
+            deviceMetadata = {
+                userAgent: userAgent,
+                screenResolution: screenResolution
+            };
+
+            // Update UI with summarized device info
+            const conciseOS = getConciseOS(userAgent);
+            deviceInfoDisplay.textContent = `${conciseOS} (${screenResolution})`;
+        }
+
 
         // -------------------------------------------------------------------
         // 1. FIREBASE INITIALIZATION AND AUTHENTICATION
@@ -215,6 +265,9 @@
             db = getFirestore(app);
             auth = getAuth(app);
             
+            // Capture metadata immediately on load
+            captureDeviceMetadata(); 
+
             // Initial call to show loading while firebase auth completes
             showLoading("Initializing Firebase...");
 
@@ -363,17 +416,11 @@
 
             processImageButton.disabled = true;
             resetDisplay();
-            // This is the message the user wanted to appear in the first section
             showLoading("Analyzing image and extracting structured data...");
 
             try {
                 const base64ImageData = await toBase64(file);
                 
-                // Check if API Key is present for external deployment
-                if (!apiKey || apiKey === "YOUR_ACTUAL_GEMINI_API_KEY_HERE") {
-                    // NOTE: Removed the throw, assuming Canvas will inject or user provided a key.
-                }
-
                 const payload = {
                     contents: [
                         {
@@ -515,10 +562,17 @@
             showLoading(`Saving extracted data to Firestore...`);
 
             try {
+                // Combine extracted data with device metadata
                 const dataToSave = {
                     identifier: extractedData.identifier,
                     barcode_number: extractedData.barcode_number,
                     expiry_date: extractedData.expiry_date,
+                    
+                    // --- SECURITY/AUDITING FIELDS ---
+                    device_user_agent: deviceMetadata.userAgent,
+                    device_resolution: deviceMetadata.screenResolution,
+                    // ------------------------------------
+
                     timestamp: serverTimestamp(),
                     user: userId
                 };
@@ -561,6 +615,8 @@
                         identifier: data.identifier,
                         barcode_number: data.barcode_number,
                         expiry_date: data.expiry_date,
+                        device_user_agent: data.device_user_agent || 'N/A',
+                        device_resolution: data.device_resolution || 'N/A',
                         // Ensure timestamp conversion is safe
                         timestamp: data.timestamp && typeof data.timestamp.toDate === 'function' ? data.timestamp.toDate() : new Date()
                     });
@@ -597,7 +653,7 @@
 
             recordedData.forEach(item => {
                 const li = document.createElement('li');
-                li.className = 'flex flex-col md:flex-row md:justify-between items-start md:items-center bg-white p-4 rounded-xl shadow-sm border border-gray-200 hover:shadow-md transition duration-150 space-y-2 md:space-y-0';
+                li.className = 'flex flex-col items-start bg-white p-4 rounded-xl shadow-sm border border-gray-200 hover:shadow-md transition duration-150 space-y-2';
 
                 // Format the 15-digit code for readability (5-5-5)
                 const rawIdentifier = String(item.identifier || 'N/A');
@@ -605,28 +661,44 @@
                     ? rawIdentifier.slice(0, 5) + ' ' + rawIdentifier.slice(5, 10) + ' ' + rawIdentifier.slice(10)
                     : rawIdentifier;
                     
-                // Format the 17-digit code for readability (5-5-5-2) - Adjust as needed
+                // Format the 17-digit code for readability (5-5-5-2)
                 const rawBarcode = String(item.barcode_number || 'N/A');
                 const displayBarcodeFormatted = rawBarcode.length > 5 
                     ? rawBarcode.slice(0, 5) + ' ' + rawBarcode.slice(5, 10) + ' ' + rawBarcode.slice(10, 15) + ' ' + rawBarcode.slice(15)
                     : rawBarcode;
 
-
                 const formattedTime = item.timestamp.toLocaleString('en-US', {
                     month: 'short', day: 'numeric',
                     hour: '2-digit', minute: '2-digit'
                 });
+                
+                // NEW: Get concise OS name and combine with resolution for display
+                const deviceOS = getConciseOS(item.device_user_agent);
+                const osResolutionDisplay = `${deviceOS} \\ ${item.device_resolution}`;
+                
+                // Truncate User Agent for a title attribute (full detail on hover)
+                const shortUserAgent = item.device_user_agent.length > 50 
+                    ? item.device_user_agent.substring(0, 47) + '...' 
+                    : item.device_user_agent;
 
                 li.innerHTML = `
-                    <div class="flex flex-col text-sm space-y-1">
-                        <p class="text-xs text-gray-400">ID / Barcode / Date</p>
-                        <p class="text-base font-mono text-gray-800">
-                            <span class="font-bold">${displayIdentifierFormatted}</span> | 
-                            <span>${displayBarcodeFormatted}</span> | 
-                            <span class="text-emerald-600">${item.expiry_date || 'N/A'}</span>
-                        </p>
+                    <div class="flex flex-col w-full">
+                        <p class="text-xs text-gray-400 mb-1">ID | Barcode | Date | Device OS \\ Resolution</p>
+                        <div class="flex flex-col md:flex-row md:justify-between w-full">
+                            <p class="text-base font-mono text-gray-800 font-semibold break-all text-sm md:text-base">
+                                <span>${displayIdentifierFormatted}</span> | 
+                                <span>${displayBarcodeFormatted}</span> | 
+                                <span class="text-emerald-600">${item.expiry_date || 'N/A'}</span>
+                                <span class="text-gray-500 font-normal ml-2 md:ml-4">| ${osResolutionDisplay}</span>
+                            </p>
+                            <span class="text-xs text-gray-400 mt-2 md:mt-0">${formattedTime}</span>
+                        </div>
                     </div>
-                    <span class="text-xs text-gray-400 mt-2 md:mt-0">${formattedTime}</span>
+                    <!-- Keeping the full user agent accessible via a hidden/small element for audit -->
+                    <p class="text-xs text-gray-500 pt-1 w-full hidden md:block">
+                        <span class="font-semibold">Full Agent:</span> 
+                        <span title="${item.device_user_agent}" class="font-normal text-gray-400">${shortUserAgent}</span>
+                    </p>
                 `;
                 numbersList.appendChild(li);
             });
@@ -646,7 +718,16 @@
             exportButton.disabled = true;
             exportButton.textContent = 'Preparing...';
 
-            const headers = ["Identifier (15-Digit)", "Barcode Number (17-Digit)", "Expiry Date (DD/MM/YY)", "Timestamp", "RecordID"];
+            // ADDED NEW HEADERS
+            const headers = [
+                "Identifier (15-Digit)", 
+                "Barcode Number (17-Digit)", 
+                "Expiry Date (DD/MM/YY)", 
+                "Timestamp", 
+                "Device User Agent", 
+                "Device Resolution", 
+                "RecordID"
+            ];
             let csv = headers.join(',') + '\n';
 
             recordedData.forEach(item => {
@@ -654,9 +735,13 @@
                 const barcode = `"${item.barcode_number || ''}"`;
                 const date = `"${item.expiry_date || ''}"`;
                 const timestamp = `"${item.timestamp.toISOString()}"`;
+                // DEVICE FIELDS
+                const userAgent = `"${item.device_user_agent || ''}"`;
+                const resolution = `"${item.device_resolution || ''}"`;
+
                 const recordId = `"${item.id}"`;
                 
-                csv += [identifier, barcode, date, timestamp, recordId].join(',') + '\n';
+                csv += [identifier, barcode, date, timestamp, userAgent, resolution, recordId].join(',') + '\n';
             });
 
             const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
