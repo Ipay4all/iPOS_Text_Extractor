@@ -553,7 +553,7 @@
             return collection(db, path);
         }
         
-        // Function to save all extracted numbers to Firestore (now handles an array)
+        // Function to save all extracted numbers to Firestore (UPDATED FOR ROBUSTNESS)
         window.saveExtractedNumbers = async function() {
             if (!extractedData || extractedData.length === 0) {
                 alertMessage("No Data", "No cards were extracted to save.");
@@ -575,10 +575,9 @@
                 const collectionRef = getCollectionRef();
                 if (!collectionRef) return;
                 
-                let docsSaved = 0;
+                // --- NEW ROBUST SAVING LOGIC using Promise.allSettled ---
                 
-                // CRUCIAL LOGIC: Loop through the array of extracted cards and save each one as a separate document
-                for (const card of extractedData) {
+                const savePromises = extractedData.map((card, index) => {
                     const dataToSave = {
                         identifier: card.identifier,
                         barcode_number: card.barcode_number,
@@ -592,23 +591,40 @@
                         timestamp: serverTimestamp(),
                         user: userId
                     };
-
-                    // addDoc creates a NEW document for EACH card, ensuring multiple records are saved.
-                    await addDoc(collectionRef, dataToSave);
-                    docsSaved++;
-                }
+                    
+                    // addDoc returns a promise for a single write operation
+                    return addDoc(collectionRef, dataToSave)
+                        .then(() => ({ status: 'fulfilled', cardIndex: index }))
+                        .catch(error => {
+                            console.error(`Failed to save card ${index + 1}:`, error);
+                            return ({ status: 'rejected', cardIndex: index, reason: error });
+                        });
+                });
                 
-                extractedData = null; // Clear state after saving
+                // Wait for ALL promises to complete (either resolved or rejected)
+                const results = await Promise.allSettled(savePromises);
+                
+                const docsSaved = results.filter(r => r.status === 'fulfilled').length;
+                const docsFailed = results.filter(r => r.status === 'rejected').length;
+
+                extractedData = null; // Clear state after attempting to save
                 resetDisplay();
-                alertMessage("Success", `Successfully saved ${docsSaved} document(s).`);
+                
+                if (docsFailed === 0) {
+                    alertMessage("Success", `Successfully saved all ${docsSaved} document(s).`);
+                } else if (docsSaved > 0) {
+                    alertMessage("Partial Success", `Saved ${docsSaved} card(s). ${docsFailed} failed to save (Check console for errors).`);
+                } else {
+                    displayError(`All ${docsFailed} save attempts failed. Please check Firestore security rules and network connection.`);
+                }
 
             } catch (e) {
-                console.error("Error adding documents: ", e);
-                displayError("Could not save the data to the database. Check Firestore Rules!");
+                // This catch block handles errors *before* promises are executed (e.g., initial ref error)
+                console.error("Critical error during save initiation: ", e);
+                displayError("Could not initiate database save operation.");
             } finally {
                 saveExtractedButton.disabled = true;
                 saveCountSpan.textContent = '0';
-                // UPDATED BUTTON TEXT for clarity
                 saveExtractedButton.innerHTML = `<svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7H5a2 2 0 00-2 2v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3-3m0 0l-3 3m3-3v8"></path></svg>Save <span id="save-count">0</span> Card(s) as Separate Records`;
                 hideLoading();
             }
