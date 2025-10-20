@@ -27,8 +27,7 @@
 
     <div id="app-container" class="bg-white shadow-2xl rounded-xl w-full max-w-4xl p-6 md:p-10 transition-all duration-300">
         <h1 class="4xl font-extrabold text-emerald-600 mb-2">Multi-Field Identifier Extractor</h1>
-        <p class="text-gray-500 mb-6 border-b pb-4">Use your **mobile camera** to capture an image and extract three structured fields: **Identifier (15-digit)**, **Barcode Number (17-digit)**, and **Expiry Date** (DD/MM/YY).</p>
-
+        
         <!-- User/Auth Info -->
         <div class="mb-6 bg-emerald-50 p-3 rounded-lg text-sm text-emerald-800">
             <p><strong>App ID:</strong> <span id="app-id">...</span></p>
@@ -111,7 +110,7 @@
         import { 
             getAuth, 
             signInAnonymously, 
-            signInWithCustomToken, // Added this import
+            signInWithCustomToken, 
             onAuthStateChanged 
         } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { 
@@ -125,31 +124,14 @@
 
         // --- GLOBAL CONSTANTS ---
         const API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent';
-        
-        // 🚨 1. INSERT YOUR GEMINI API KEY HERE 🚨
-        const apiKey = ""; // <--- REPLACE ME WITH YOUR KEY
+        const apiKey = "AIzaSyCA4MpL1N3GpJohJbc6zbjb6C4cEEvqUI0"; // API key will be provided by Canvas runtime
 
-        // --- FIREBASE CONFIGURATION PRIORITY (For robustness in and out of canvas) ---
-        
-        // 1. Check for environment globals (REQUIRED for Canvas execution)
-        const envAppId = typeof __app_id !== 'undefined' ? __app_id : 'extractor-app';
-        const envFirebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : null;
+        // --- GLOBAL VARIABLES (Provided by Canvas) ---
+        // NOTE: These variables are expected to be injected by the deployment environment (e.g., Canvas).
+        // For local development, they must be manually defined or handled.
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+        const firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{}');
         const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
-
-        // 2. Fallback for external deployment (manual config)
-        // 🚨 2. PASTE YOUR ENTIRE FIREBASE CONFIGURATION OBJECT HERE IF NOT USING CANVAS 🚨
-        const manualFirebaseConfig = {
-            // apiKey: "Azz_...",
-            // authDomain: "your-project-id.firebaseapp.com",
-            // projectId: "your-project-id",
-            // storageBucket: "your-project-id.appspot.com",
-            // messagingSenderId: "1234567890",
-            // appId: "1:1234567890:web:abcdef1234567890"
-        };
-        // 🚨 END OF FIREBASE CONFIGURATION INSERTION 🚨
-
-        const firebaseConfigToUse = envFirebaseConfig || manualFirebaseConfig;
-        const appId = envAppId; // Use the environment ID or default
         
         // --- APP STATE ---
         let app;
@@ -196,9 +178,9 @@
         // 1. FIREBASE INITIALIZATION AND AUTHENTICATION
         // -------------------------------------------------------------------
 
-        if (firebaseConfigToUse && Object.keys(firebaseConfigToUse).length > 0 && firebaseConfigToUse.projectId) {
+        if (Object.keys(firebaseConfig).length > 0) {
             try {
-                app = initializeApp(firebaseConfigToUse);
+                app = initializeApp(firebaseConfig);
                 db = getFirestore(app);
                 auth = getAuth(app);
                 
@@ -208,16 +190,14 @@
                     if (!user) {
                         try {
                             if (initialAuthToken) {
-                                // Sign in with provided token (Canvas environment)
                                 await signInWithCustomToken(auth, initialAuthToken);
                             } else {
-                                // Fallback to Anonymous Auth (external deployment or missing token)
                                 await signInAnonymously(auth);
                             }
                             user = auth.currentUser;
                         } catch (error) {
                             console.error("Authentication failed:", error);
-                            displayError("Failed to authenticate. Ensure Anonymous Auth is enabled in Firebase and the token is valid.");
+                            displayError("Failed to authenticate. Check console for details.");
                             return;
                         }
                     }
@@ -225,13 +205,7 @@
                     // Once authenticated, set state and start listening
                     userId = user.uid;
                     document.getElementById('user-id').textContent = userId;
-                    // Only enable processing if a file is selected AND key is present
-                    processImageButton.disabled = imageFileInput.files.length === 0 || apiKey === "";
-                    
-                    if(apiKey === "") {
-                         alertMessage("API Key Missing", "Please insert your Gemini API Key in the code to enable image extraction.");
-                    }
-                    
+                    processImageButton.disabled = imageFileInput.files.length === 0;
                     hideLoading();
                     setupRealtimeListener();
                     resetDisplay(); // Reset on successful auth
@@ -242,12 +216,13 @@
                 displayError("Failed to initialize Firebase. Please check the console.");
             }
         } else {
-            // Custom error message for when config is missing
-            if(apiKey === "") {
-                 alertMessage("API Key Missing", "Please insert your Gemini API Key in the code to enable image extraction.");
-            }
-             processImageButton.disabled = imageFileInput.files.length === 0 || apiKey === "";
-            displayError("Database Error: Firebase configuration is missing. Cannot save data.");
+            // This is acceptable for local testing where environment variables might not be set
+            console.warn("Firebase configuration is missing. Data saving will not work.");
+            userId = crypto.randomUUID(); // Fallback for UI display
+            document.getElementById('user-id').textContent = userId + " (Local)";
+            processImageButton.disabled = imageFileInput.files.length === 0;
+            hideLoading();
+            resetDisplay();
         }
         
         // Utility Functions
@@ -288,9 +263,8 @@
                 reader.onload = (e) => {
                     imagePreview.src = e.target.result;
                     imagePreviewContainer.classList.remove('hidden');
-                    // Enable button only if file is selected AND key is present
-                    processImageButton.disabled = apiKey === ""; 
-                    resetDisplay(); 
+                    processImageButton.disabled = false;
+                    resetDisplay(); // Reset fields when a new image is loaded
                 };
                 reader.readAsDataURL(file);
             } else {
@@ -332,10 +306,6 @@
 
 
         window.processImageForNumbers = async function() {
-            if (apiKey === "") {
-                 return alertMessage("API Key Missing", "Please insert your Gemini API Key in the code to enable image extraction.");
-            }
-
             const file = imageFileInput.files[0];
             if (!file) return alertMessage("Missing Image", "Please capture or select an image first.");
 
@@ -400,7 +370,7 @@
                 const jsonText = result?.candidates?.[0]?.content?.parts?.[0]?.text;
                 
                 if (!jsonText) {
-                    throw new Error("AI returned no content. This usually means the image was too complex or the API call failed silently.");
+                    throw new Error("AI returned no content.");
                 }
 
                 // Parse and validate the JSON response
@@ -438,19 +408,14 @@
                 
                 // Enable save only if we have at least one valid number and a date
                 if (data.identifier.length === 15 || data.barcode_number.length === 17 || data.expiry_date.length > 0) {
-                    // Check if Firebase is actually configured before enabling the save button
-                    if (firebaseConfigToUse && Object.keys(firebaseConfigToUse).length > 0 && firebaseConfigToUse.projectId) {
-                        saveExtractedButton.disabled = false;
-                    } else {
-                        alertMessage("Save Disabled", "Database config is missing. Data extracted but cannot be saved.");
-                    }
+                    saveExtractedButton.disabled = false;
                 } else {
                     alertMessage("No Data Found", "Could not extract any valid data points.");
                 }
 
             } catch (e) {
                 console.error("API or processing error: ", e);
-                displayError("Failed to extract data. Check console for API key errors or network issues.");
+                displayError("Failed to extract data. Check console for details.");
             } finally {
                 processImageButton.disabled = false;
                 processImageButton.textContent = '2. Extract 3 Fields (Identifier, Barcode, Date)';
@@ -468,8 +433,8 @@
                 console.error("Firestore or User ID is not ready.");
                 return null;
             }
-            // Private collection path: /artifacts/{appId}/users/{userId}/extracted_card_data/{documentId}
-            const path = `artifacts/${appId}/users/${userId}/extracted_card_data`; 
+            // Private collection path: /artifacts/{appId}/users/{userId}/{collectionName}
+            const path = `artifacts/${appId}/users/${userId}/extracted_card_data`; // Updated collection name
             return collection(db, path);
         }
         
@@ -480,6 +445,12 @@
                 return;
             }
             
+            // Check if Firebase is initialized before attempting save
+            if (!db) {
+                alertMessage("Database Error", "Database is not configured. Cannot save data locally.");
+                return;
+            }
+
             saveExtractedButton.disabled = true;
             saveExtractedButton.textContent = `Saving data...`;
             showLoading(`Saving extracted data to Firestore...`);
@@ -504,7 +475,7 @@
 
             } catch (e) {
                 console.error("Error adding document: ", e);
-                displayError("Could not save the data. Check Firebase rules and configuration.");
+                displayError("Could not save the data to the database.");
             } finally {
                 saveExtractedButton.disabled = true;
                 saveExtractedButton.textContent = 'Save Data to Firestore';
@@ -514,6 +485,8 @@
 
         // Function to set up the real-time listener for the data
         function setupRealtimeListener() {
+            if (!db) return; // Skip if database isn't configured
+
             const collectionRef = getCollectionRef();
             if (!collectionRef) return;
 
@@ -543,7 +516,7 @@
             }, (error) => {
                 console.error("Error listening to Firestore:", error);
                 hideLoading();
-                displayError("Real-time data failed to load. Check console and Firebase Rules.");
+                displayError("Real-time data failed to load. Check console.");
             });
         }
 
