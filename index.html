@@ -32,7 +32,8 @@
 
     <div id="app-container" class="bg-white shadow-2xl rounded-xl w-full max-w-4xl p-6 md:p-10 transition-all duration-300">
         <h1 class="4xl font-extrabold text-emerald-600 mb-2">Multi-Card Identifier Extractor</h1>
-        <p class="text-gray-500 mb-6 border-b pb-4">Capture an image containing up to 4 cards to extract data simultaneously.</p>
+        <!-- UPDATED TEXT: Max capacity set to 20 -->
+        <p class="text-gray-500 mb-6 border-b pb-4">Capture an image containing up to **20 cards** to extract data simultaneously.</p>
 
         <!-- User/Auth Info -->
         <div class="mb-6 bg-emerald-50 p-3 rounded-lg text-sm text-emerald-800">
@@ -82,7 +83,8 @@
             <h3 class="2xl font-bold text-gray-700 mb-3">3. Extracted Cards Ready to Save</h3>
             <div id="extracted-display" class="min-h-[50px] p-3 bg-white border border-dashed border-gray-300 rounded-lg text-gray-600 whitespace-pre-wrap text-sm font-mono break-all space-y-2">
                 <p><strong>Cards Found:</strong> <span id="display-card-count" class="font-mono text-gray-800 font-semibold">---</span></p>
-                <p id="display-status" class="text-xs text-gray-500 italic">Upload an image of 1-4 cards to begin extraction.</p>
+                <!-- UPDATED TEXT: Max capacity set to 20 -->
+                <p id="display-status" class="text-xs text-gray-500 italic">Upload an image of 1-20 cards to begin extraction.</p>
             </div>
             
             <button id="save-extracted-button" onclick="saveExtractedNumbers()" disabled
@@ -114,8 +116,6 @@
         </div>
     </div>
     
-    <!-- NOTE: CSV Preview Modal HTML was removed as requested -->
-
     <!-- Firebase Imports and Logic -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
@@ -139,7 +139,7 @@
         // ====================================================================================
         // 1. GEMINI API KEY (Used for image processing)
         // ====================================================================================
-        const apiKey = "AIzaSyCA4MpL1N3GpJohJbc6zbjb6C4cEEvqUI0"; // NOTE: Left blank as per instruction for platform injection.
+        const apiKey = ""; // NOTE: Left blank as per instruction for platform injection.
 
         // --- GLOBAL VARIABLES (MANDATORY Canvas Environment Checks) ---
         // MANDATORY: Check for __app_id or use fallback
@@ -212,7 +212,8 @@
         // Initial Display Reset
         function resetDisplay() {
             displayCardCount.textContent = '---';
-            displayStatus.textContent = 'Awaiting new extraction.';
+            // UPDATED TEXT: Reflects new 20-card capacity
+            displayStatus.textContent = 'Upload an image of 1-20 cards to begin extraction.';
             saveExtractedButton.disabled = true;
             saveCountSpan.textContent = '0';
             extractedData = null; // Clear array
@@ -417,7 +418,8 @@
             }
         };
 
-        const systemPrompt = "You are a specialized data extraction bot. Your task is to analyze the provided image, identify all individual cards (expected 1 to 4 cards), and extract exactly three specific pieces of information from EACH card as a valid JSON ARRAY of objects. For numbers, provide only the raw digits, no spaces. For the date, provide the DD/MM/YY format. If a value is not found on a specific card, use an empty string for that field in that card's object.";
+        // UPDATED SYSTEM PROMPT: Now explicitly requests up to 20 cards
+        const systemPrompt = "You are a specialized data extraction bot. Your task is to analyze the provided image, identify all individual cards (expected 1 to 20 cards), and extract exactly three specific pieces of information from EACH card as a valid JSON ARRAY of objects. For numbers, provide only the raw digits, no spaces. For the date, provide the DD/MM/YY format. If a value is not found on a specific card, use an empty string for that field in that card's object.";
         const userQuery = "Identify all cards in the image. For each card, extract the 15-digit identifier, the 17-digit barcode number, and the expiry date (DD/MM/YY). Return the results as a JSON array of objects.";
 
 
@@ -553,7 +555,7 @@
             return collection(db, path);
         }
         
-        // Function to save all extracted numbers to Firestore (UPDATED FOR ROBUSTNESS)
+        // Function to save all extracted numbers to Firestore (ROBUST LOGIC RETAINED)
         window.saveExtractedNumbers = async function() {
             if (!extractedData || extractedData.length === 0) {
                 alertMessage("No Data", "No cards were extracted to save.");
@@ -575,7 +577,7 @@
                 const collectionRef = getCollectionRef();
                 if (!collectionRef) return;
                 
-                // --- NEW ROBUST SAVING LOGIC using Promise.allSettled ---
+                // --- ROBUST SAVING LOGIC using Promise.allSettled ---
                 
                 const savePromises = extractedData.map((card, index) => {
                     const dataToSave = {
@@ -646,9 +648,11 @@
                     const data = doc.data();
                     recordedData.push({
                         id: doc.id,
-                        identifier: data.identifier,
-                        barcode_number: data.barcode_number,
-                        expiry_date: data.expiry_date,
+                        // --- CRITICAL FIX: Explicitly cast to string to prevent type issues in CSV ---
+                        identifier: String(data.identifier || 'N/A'),
+                        barcode_number: String(data.barcode_number || 'N/A'),
+                        expiry_date: String(data.expiry_date || 'N/A'),
+                        // ---------------------------------------------------------------------------
                         device_user_agent: data.device_user_agent || 'N/A',
                         device_resolution: data.device_resolution || 'N/A',
                         // Ensure timestamp conversion is safe
@@ -690,13 +694,13 @@
                 li.className = 'flex flex-col items-start bg-white p-4 rounded-xl shadow-sm border border-gray-200 hover:shadow-md transition duration-150 space-y-2';
 
                 // Format the 15-digit code for readability (5-5-5)
-                const rawIdentifier = String(item.identifier || 'N/A');
+                const rawIdentifier = item.identifier; // Now assured to be string or 'N/A'
                 const displayIdentifierFormatted = rawIdentifier.length === 15 
                     ? rawIdentifier.slice(0, 5) + ' ' + rawIdentifier.slice(5, 10) + ' ' + rawIdentifier.slice(10)
                     : rawIdentifier;
                     
                 // Format the 17-digit code for readability (5-5-5-2)
-                const rawBarcode = String(item.barcode_number || 'N/A');
+                const rawBarcode = item.barcode_number; // Now assured to be string or 'N/A'
                 const displayBarcodeFormatted = rawBarcode.length > 5 
                     ? rawBarcode.slice(0, 5) + ' ' + rawBarcode.slice(5, 10) + ' ' + rawBarcode.slice(10, 15) + ' ' + rawBarcode.slice(15)
                     : rawBarcode;
@@ -742,11 +746,10 @@
             exportButton.disabled = recordedData.length === 0;
         }
 
-        // --- CSV GENERATION ---
+        // --- CSV GENERATION (CRITICALLY CHECKED) ---
         function generateCSV() {
             if (recordedData.length === 0) return '';
 
-            // ADDED NEW HEADERS
             const headers = [
                 "Identifier (15-Digit)", 
                 "Barcode Number (17-Digit)", 
@@ -759,14 +762,18 @@
             let csv = headers.join(',') + '\n';
 
             recordedData.forEach(item => {
-                // Ensure data is wrapped in quotes to handle commas/special characters if any exist
-                const identifier = `"${item.identifier || ''}"`;
-                const barcode = `"${item.barcode_number || ''}"`;
-                const date = `"${item.expiry_date || ''}"`;
+                // NOTE: item.identifier and item.barcode_number are now guaranteed to be strings (or 'N/A')
+                // from the setupRealtimeListener logic.
+                
+                // Ensure data is wrapped in quotes to handle commas/special characters
+                const identifier = `"${item.identifier}"`;
+                const barcode = `"${item.barcode_number}"`; 
+                const date = `"${item.expiry_date}"`;
                 const timestamp = `"${item.timestamp.toISOString()}"`;
-                // DEVICE FIELDS
-                const userAgent = `"${item.device_user_agent.replace(/"/g, '""') || ''}"`; // Escape double quotes within field
-                const resolution = `"${item.device_resolution || ''}"`;
+                
+                // DEVICE FIELDS - escaping quotes within the user agent string
+                const userAgent = `"${item.device_user_agent.replace(/"/g, '""')}"`; 
+                const resolution = `"${item.device_resolution}"`;
 
                 const recordId = `"${item.id}"`;
                 
@@ -775,11 +782,7 @@
             return csv;
         }
 
-        // --- DIRECT DOWNLOAD FUNCTION (Updated) ---
-
-        /**
-         * Generates the CSV from recorded data and immediately triggers a file download.
-         */
+        // --- DIRECT DOWNLOAD FUNCTION ---
         window.triggerCSVDownload = function() {
             const currentCSVString = generateCSV();
 
@@ -810,5 +813,3 @@
     </script>
 </body>
 </html>
-
-
