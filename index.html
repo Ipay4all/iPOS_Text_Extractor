@@ -37,8 +37,8 @@
         <!-- Loading and Error Display -->
         <div id="error-message" class="text-center py-4 text-red-600 bg-red-100 rounded-lg hidden mb-4"></div>
 
-        <!-- Input Form (Image-Based) -->
-        <div class="flex flex-col gap-4 mb-8 p-4 border rounded-xl bg-emerald-50 shadow-inner">
+        <!-- === 1. CAPTURE IMAGE BOX === -->
+        <div class="flex flex-col gap-4 mb-4 p-4 border rounded-xl bg-emerald-50 shadow-inner">
             <h3 class="text-2xl font-bold text-emerald-700">1. Capture or Select Image</h3>
             
             <!-- File Input (accepts camera capture - KEY FOR MOBILE) -->
@@ -53,25 +53,30 @@
             <div id="image-preview-container" class="mt-2 hidden bg-gray-100 p-2 rounded-lg">
                 <img id="image-preview" class="max-w-full h-auto rounded-lg shadow-lg max-h-64 object-contain mx-auto transition-opacity duration-300" alt="Image Preview">
             </div>
+        </div>
 
+        <!-- === 2. EXTRACT CARDS BUTTON (New Separate Box) === -->
+        <div class="flex flex-col gap-4 mb-8">
             <button id="process-image-button" onclick="processImageForNumbers()" disabled
-                    class="bg-emerald-500 hover:bg-emerald-600 text-white font-semibold py-3 px-6 rounded-lg shadow-md transition duration-150 disabled:bg-gray-400 flex items-center justify-center">
+                    class="bg-emerald-500 hover:bg-emerald-600 text-white font-semibold py-3 px-6 rounded-lg shadow-xl transition duration-150 disabled:bg-gray-400 flex items-center justify-center text-lg">
                 2. Extract ALL Cards (Identifier, Barcode, Date)
             </button>
             
             <!-- Loading Indicator for Image Processing -->
-            <div id="loading-indicator" class="text-center py-4 text-emerald-500 hidden border-t border-emerald-200 pt-4">
+            <div id="loading-indicator" class="text-center py-2 text-emerald-500 hidden pt-2">
                 <svg class="animate-spin h-5 w-5 mr-3 inline-block" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
                 <span id="loading-message">Initializing...</span>
             </div>
         </div>
 
-        <!-- Extracted Data Area -->
+
+        <!-- === 3. EXTRACTED DATA AREA === -->
+        <!-- Added pt-6 and pb-3 to the h3 for extra vertical spacing -->
         <div id="extraction-result-area" class="mt-6 mb-8 p-4 border rounded-xl bg-gray-100 shadow-md">
-            <h3 class="2xl font-bold text-gray-700 mb-3">3. Extracted Cards Ready to Add to List</h3>
+            <h3 class="2xl font-bold text-gray-700 pt-6 pb-3">3. Extracted Cards Ready to Add to List</h3>
             <div id="extracted-display" class="min-h-[50px] p-3 bg-white border border-dashed border-gray-300 rounded-lg text-gray-600 whitespace-pre-wrap text-sm font-mono break-all space-y-2">
                 <p><strong>Cards Found:</strong> <span id="display-card-count" class="font-mono text-gray-800 font-semibold">---</span></p>
-                <p id="display-status" class="text-xs text-gray-500 italic">Upload an image to begin extraction.</p>
+                <p id="display-status" class="text-xs text-gray-500 italic">Extract an image to see results here.</p>
             </div>
             
             <button id="save-extracted-button" onclick="addExtractedCardsToLocalList()" disabled
@@ -137,8 +142,6 @@
         
         // --- INITIALIZATION ---
         
-        // This function will be called once to load any existing data (if we were using localStorage, 
-        // but since we're not using any persistence, it just calls renderData to update the initial UI)
         function initializeApp() {
             renderData();
             updateExportButtonState();
@@ -146,7 +149,7 @@
 
         function resetDisplay() {
             displayCardCount.textContent = '---';
-            displayStatus.textContent = 'Upload an image to begin extraction.';
+            displayStatus.textContent = 'Extract an image to see results here.';
             saveExtractedButton.disabled = true;
             saveCountSpan.textContent = '0';
             extractedData = null; // Clear array
