@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Multi-Card Identifier Extractor</title>
+    <title>Multi-Card CSV Extractor</title>
     <!-- Load Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
@@ -21,37 +21,25 @@
         body {
             font-family: 'Inter', sans-serif;
         }
-        /* Modal Backdrop (Removed, but keeping for structural memory if needed later) */
-        .modal-backdrop {
-            background-color: rgba(0, 0, 0, 0.6);
-            backdrop-filter: blur(4px);
+        /* Style for the Save button text to adjust dynamically */
+        #save-extracted-button span {
+            display: inline-block;
+            min-width: 1ch; /* Ensure space for the number */
         }
     </style>
 </head>
 <body class="bg-gray-50 min-h-screen flex items-center justify-center p-4">
 
     <div id="app-container" class="bg-white shadow-2xl rounded-xl w-full max-w-4xl p-6 md:p-10 transition-all duration-300">
-        <h1 class="4xl font-extrabold text-emerald-600 mb-2">Multi-Card Identifier Extractor</h1>
-        <!-- UPDATED TEXT: Max capacity set to 20 -->
-        <p class="text-gray-500 mb-6 border-b pb-4">Capture an image containing up to **20 cards** to extract data simultaneously.</p>
+        <h1 class="4xl font-extrabold text-emerald-600 mb-2">Multi-Card CSV Extractor</h1>
+        <p class="text-gray-500 mb-6 border-b pb-4">Capture an image of cards to extract data and immediately download it as a CSV file.</p>
 
-        <!-- User/Auth Info -->
-        <div class="mb-6 bg-emerald-50 p-3 rounded-lg text-sm text-emerald-800">
-            <p><strong>App ID:</strong> <span id="app-id">...</span></p>
-            <p><strong>User ID:</strong> <span id="user-id">Authenticating...</span></p>
-            <!-- DEVICE INFO DISPLAY -->
-            <p class="mt-2 text-xs text-emerald-700 font-semibold">
-                Device Info (for Auditing): <span id="device-info-display" class="font-normal">Loading...</span>
-            </p>
-        </div>
-        
         <!-- Loading and Error Display -->
         <div id="error-message" class="text-center py-4 text-red-600 bg-red-100 rounded-lg hidden mb-4"></div>
 
-
         <!-- Input Form (Image-Based) -->
         <div class="flex flex-col gap-4 mb-8 p-4 border rounded-xl bg-emerald-50 shadow-inner">
-            <h3 class="text-2xl font-bold text-emerald-700">1. Capture Image with Camera</h3>
+            <h3 class="text-2xl font-bold text-emerald-700">1. Capture or Select Image</h3>
             
             <!-- File Input (accepts camera capture - KEY FOR MOBILE) -->
             <label for="image-file-input" class="cursor-pointer bg-white hover:bg-gray-50 text-emerald-700 font-semibold py-3 px-6 rounded-lg border border-emerald-300 shadow-md transition duration-150 flex items-center justify-center space-x-2">
@@ -80,26 +68,25 @@
 
         <!-- Extracted Data Area -->
         <div id="extraction-result-area" class="mt-6 mb-8 p-4 border rounded-xl bg-gray-100 shadow-md">
-            <h3 class="2xl font-bold text-gray-700 mb-3">3. Extracted Cards Ready to Save</h3>
+            <h3 class="2xl font-bold text-gray-700 mb-3">3. Extracted Cards Ready to Add to List</h3>
             <div id="extracted-display" class="min-h-[50px] p-3 bg-white border border-dashed border-gray-300 rounded-lg text-gray-600 whitespace-pre-wrap text-sm font-mono break-all space-y-2">
                 <p><strong>Cards Found:</strong> <span id="display-card-count" class="font-mono text-gray-800 font-semibold">---</span></p>
-                <!-- UPDATED TEXT: Max capacity set to 20 -->
-                <p id="display-status" class="text-xs text-gray-500 italic">Upload an image of 1-20 cards to begin extraction.</p>
+                <p id="display-status" class="text-xs text-gray-500 italic">Upload an image to begin extraction.</p>
             </div>
             
-            <button id="save-extracted-button" onclick="saveExtractedNumbers()" disabled
+            <button id="save-extracted-button" onclick="addExtractedCardsToLocalList()" disabled
                     class="w-full mt-4 bg-blue-500 hover:bg-blue-600 text-white font-semibold py-3 rounded-lg shadow-md transition duration-150 disabled:bg-gray-400 flex items-center justify-center">
-                <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7H5a2 2 0 00-2 2v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3-3m0 0l-3 3m3-3v8"></path></svg>
-                Save <span id="save-count">0</span> Card(s) as Separate Records
+                <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
+                Add <span id="save-count">0</span> Card(s) to Local List
             </button>
         </div>
 
 
         <!-- Action and Status Area -->
         <div class="flex justify-between items-center mb-6 border-t pt-4">
-            <h2 class="text-2xl font-bold text-gray-700">Recorded Data (<span id="count">0</span>)</h2>
+            <h2 class="text-2xl font-bold text-gray-700">Local List (<span id="count">0</span>)</h2>
             
-            <!-- UPDATED: Direct Download Button -->
+            <!-- Direct Download Button -->
             <button id="export-button" onclick="triggerCSVDownload()" disabled
                     class="bg-gray-500 hover:bg-gray-600 text-white font-medium py-2 px-4 rounded-lg shadow-md transition duration-150 disabled:bg-gray-400 flex items-center">
                 <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
@@ -111,77 +98,20 @@
         <!-- Data List -->
         <div id="numbers-list-container" class="bg-gray-100 p-4 rounded-lg max-h-96 overflow-y-auto custom-scrollbar border-t">
             <ul id="numbers-list" class="space-y-3">
-                <li id="empty-state" class="text-gray-500 text-center py-4">No data recorded yet.</li>
+                <li id="empty-state" class="text-gray-500 text-center py-4">No data added to the local list yet.</li>
             </ul>
         </div>
     </div>
     
-    <!-- Firebase Imports and Logic -->
-    <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { 
-            getAuth, 
-            signInWithCustomToken, 
-            onAuthStateChanged 
-        } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { 
-            getFirestore, 
-            collection, 
-            query, 
-            addDoc, 
-            onSnapshot,
-            serverTimestamp
-        } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-
+    <!-- Application Logic -->
+    <script>
         // --- GLOBAL CONSTANTS ---
         const API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent';
-        
-        // ====================================================================================
-        // 1. GEMINI API KEY (Used for image processing)
-        // ====================================================================================
-        const apiKey = "AIzaSyCA4MpL1N3GpJohJbc6zbjb6C4cEEvqUI0"; // NOTE: Left blank as per instruction for platform injection.
+        const apiKey = "AIzaSyCA4MpL1N3GpJohJbc6zbjb6C4cEEvqUI0"; // Platform-injected key.
 
-        // --- GLOBAL VARIABLES (MANDATORY Canvas Environment Checks) ---
-        // MANDATORY: Check for __app_id or use fallback
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
-        
-        // MANDATORY: Check for __initial_auth_token or use fallback
-        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null; 
-        
-        // ====================================================================================
-        // 2. FIREBASE CONFIGURATION (MANDATORY Canvas Environment Checks)
-        // ====================================================================================
-        
-        // Default configuration based on user's previous hardcoded values, used if the 
-        // environment variable __firebase_config is not available or fails to parse.
-        const defaultFirebaseConfig = { 
-            apiKey: "AIzaSyDyRqIho0CUUJtqbzjzdGr_0smBfDG7_zY",
-            authDomain: "iposimageatext.firebaseapp.com",
-            projectId: "iposimageatext",
-            storageBucket: "iposimageatext.appspot.com",
-            messagingSenderId: "1022934110795",
-            appId: "1:1022934110795:web:db87f7d00ba3f4e8524f7a",
-            measurementId: "G-123YWKHX6"
-        };
-        
-        let firebaseConfig = defaultFirebaseConfig;
-
-        // MANDATORY: Check for __firebase_config or use fallback
-        if (typeof __firebase_config !== 'undefined' && __firebase_config) {
-            try {
-                firebaseConfig = JSON.parse(__firebase_config);
-            } catch (e) {
-                console.error("Failed to parse __firebase_config. Using default config.", e);
-            }
-        }
-        
         // --- APP STATE ---
-        let app;
-        let db;
-        let auth;
-        let userId = null;
-        let recordedData = []; 
-        let extractedData = null; // Will now hold an ARRAY of extracted card objects
+        let recordedData = []; // Main array to hold all data to be exported
+        let extractedData = null; // Will temporarily hold the array of cards extracted from the last image
         
         // --- DOM ELEMENTS ---
         const imageFileInput = document.getElementById('image-file-input');
@@ -197,144 +127,53 @@
         const loadingIndicator = document.getElementById('loading-indicator');
         const loadingMessage = document.getElementById('loading-message');
         const errorDiv = document.getElementById('error-message');
-        const deviceInfoDisplay = document.getElementById('device-info-display');
         
-        // Updated Display Elements for Multi-Card summary
+        // Display Elements for Multi-Card summary
         const displayCardCount = document.getElementById('display-card-count');
         const displayStatus = document.getElementById('display-status');
 
-        // Display initial IDs
-        document.getElementById('app-id').textContent = appId;
-        
         // Attach event listener for initial image selection
         imageFileInput.addEventListener('change', (e) => handleImageSelection(e));
         
-        // Initial Display Reset
+        // --- INITIALIZATION ---
+        
+        // This function will be called once to load any existing data (if we were using localStorage, 
+        // but since we're not using any persistence, it just calls renderData to update the initial UI)
+        function initializeApp() {
+            renderData();
+            updateExportButtonState();
+        }
+
         function resetDisplay() {
             displayCardCount.textContent = '---';
-            // UPDATED TEXT: Reflects new 20-card capacity
-            displayStatus.textContent = 'Upload an image of 1-20 cards to begin extraction.';
+            displayStatus.textContent = 'Upload an image to begin extraction.';
             saveExtractedButton.disabled = true;
             saveCountSpan.textContent = '0';
             extractedData = null; // Clear array
         }
-        
-        // --- DEVICE METADATA ---
-        let deviceMetadata = {};
 
-        // Helper function to get a concise OS name from the User Agent
+        // --- DEVICE METADATA (Captured once, used for CSV) ---
         function getConciseOS(userAgent) {
-            if (userAgent.match(/Android (\d+(\.\d+)?)/i)) {
-                return 'Android ' + (userAgent.match(/Android (\d+(\.\d+)?)/i)[1] || '');
-            }
-            // Match iOS version (e.g., OS 17_0_3)
-            if (userAgent.match(/(iPhone|iPad).*OS (\d+_\d+)/i)) {
-                return 'iOS ' + (userAgent.match(/(iPhone|iPad).*OS (\d+_\d+)/i)[2] || '').replace(/_/g, '.');
-            }
-            // Match Windows version (e.g., Windows NT 10.0 for 10/11)
-            if (userAgent.match(/Windows NT (\d+\.\d+)/i)) {
-                const version = userAgent.match(/Windows NT (\d+\.\d+)/i)[1];
-                const versionMap = { '10.0': '10/11', '6.3': '8.1', '6.2': '8', '6.1': '7' };
-                return 'Windows ' + (versionMap[version] || 'PC');
-            }
-            if (userAgent.includes('Macintosh')) {
-                return 'macOS';
-            }
-            // Fallback for Linux, etc.
-            if (userAgent.includes('Linux')) {
-                return 'Linux';
-            }
+            if (userAgent.match(/Android (\d+(\.\d+)?)/i)) { return 'Android'; }
+            if (userAgent.match(/(iPhone|iPad).*OS (\d+_\d+)/i)) { return 'iOS'; }
+            if (userAgent.match(/Windows NT (\d+\.\d+)/i)) { return 'Windows PC'; }
+            if (userAgent.includes('Macintosh')) { return 'macOS'; }
+            if (userAgent.includes('Linux')) { return 'Linux'; }
             return 'Unknown OS';
         }
 
         function captureDeviceMetadata() {
-            // Get User Agent (Device/OS/Browser Info)
             const userAgent = navigator.userAgent;
-            
-            // Get Screen Resolution
             const screenResolution = `${window.screen.width}x${window.screen.height}`;
+            const browserName = userAgent.includes('Chrome') ? 'Chrome' : userAgent.includes('Firefox') ? 'Firefox' : userAgent.includes('Safari') ? 'Safari' : 'Other';
             
-            deviceMetadata = {
+            return {
                 userAgent: userAgent,
-                screenResolution: screenResolution
+                screenResolution: screenResolution,
+                deviceOS: getConciseOS(userAgent),
+                browserName: browserName,
+                timestamp: new Date()
             };
-
-            // Update UI with summarized device info
-            const conciseOS = getConciseOS(userAgent);
-            deviceInfoDisplay.textContent = `${conciseOS} (${screenResolution})`;
-        }
-
-
-        // -------------------------------------------------------------------
-        // 1. FIREBASE INITIALIZATION AND AUTHENTICATION
-        // -------------------------------------------------------------------
-
-        try {
-            app = initializeApp(firebaseConfig);
-            db = getFirestore(app);
-            auth = getAuth(app);
-            
-            // Capture metadata immediately on load
-            captureDeviceMetadata(); 
-
-            // Initial call to show loading while firebase auth completes
-            showLoading("Initializing Firebase...");
-
-            // Generate a fallback ID using crypto.randomUUID or a simpler fallback
-            const fallbackUserId = (typeof crypto !== 'undefined' && crypto.randomUUID) 
-                                   ? crypto.randomUUID() 
-                                   : 'fallback-' + Math.random().toString(36).substring(2, 15);
-
-            
-            // Set up Auth State Listener
-            onAuthStateChanged(auth, async (user) => {
-                if (user) {
-                    // Successful login via token
-                    userId = user.uid;
-                    document.getElementById('user-id').textContent = `${userId} (Authenticated)`;
-                    console.log("Authentication successful, user ID set:", userId);
-                    hideLoading();
-                    setupRealtimeListener();
-                    resetDisplay();
-                } else {
-                    // If no user is logged in, attempt login if token exists, or fall back immediately.
-                    if (initialAuthToken) {
-                        try {
-                            // Try Custom Token (Canvas default)
-                            await signInWithCustomToken(auth, initialAuthToken);
-                            // If successful, the listener will fire again with a 'user' object.
-                        } catch (error) {
-                            // Custom token failed
-                            console.error("Custom Token Authentication Failed:", error);
-                            
-                            // Fallback: Proceed with a non-authenticated placeholder user ID
-                            userId = fallbackUserId;
-                            document.getElementById('user-id').textContent = `${userId} (CUSTOM TOKEN FAILED FALLBACK)`;
-                            displayError(`Custom Token authentication failed. Proceeding with unauthenticated ID. Error: ${error.message}`);
-
-                            hideLoading();
-                            setupRealtimeListener();
-                            resetDisplay();
-                        }
-                    } else {
-                        // **FIX: Bypass the Anonymous sign-in attempt entirely to avoid the GCloud API error.**
-                        console.warn("No Custom Auth Token provided. Bypassing Anonymous sign-in attempt to avoid external configuration errors.");
-                        userId = fallbackUserId;
-                        document.getElementById('user-id').textContent = `${userId} (UNAUTHENTICATED FALLBACK)`;
-
-                        hideLoading();
-                        setupRealtimeListener();
-                        resetDisplay();
-                    }
-                }
-                
-                // Ensure buttons are active once we have a userId (even if fallback)
-                processImageButton.disabled = imageFileInput.files.length === 0;
-            });
-
-        } catch (error) {
-            console.error("Firebase initialization failed:", error);
-            displayError("Failed to initialize Firebase. Check your configuration keys and project setup.");
         }
         
         // Utility Functions
@@ -353,20 +192,24 @@
             hideLoading();
             setTimeout(() => {
                 errorDiv.classList.add('hidden');
-            }, 7000); // Increased timeout for reading the detailed auth error
+            }, 7000); 
         }
 
         function alertMessage(title, message) {
             // Using the same error box for alerts but with a shorter display time
+            errorDiv.classList.remove('bg-red-100', 'text-red-600');
+            errorDiv.classList.add('bg-blue-100', 'text-blue-600');
             errorDiv.innerHTML = `<strong>${title}:</strong> ${message}`;
             errorDiv.classList.remove('hidden');
             setTimeout(() => {
                 errorDiv.classList.add('hidden');
+                errorDiv.classList.remove('bg-blue-100', 'text-blue-600');
+                errorDiv.classList.add('bg-red-100', 'text-red-600');
             }, 5000);
         }
 
         // -------------------------------------------------------------------
-        // 2. IMAGE HANDLING AND PREPROCESSING
+        // 1. IMAGE HANDLING AND PREPROCESSING
         // -------------------------------------------------------------------
         
         function handleImageSelection(event) {
@@ -401,7 +244,7 @@
         }
 
         // -------------------------------------------------------------------
-        // 3. GEMINI API CALL FOR STRUCTURED EXTRACTION (JSON ARRAY)
+        // 2. GEMINI API CALL FOR STRUCTURED EXTRACTION (JSON ARRAY)
         // -------------------------------------------------------------------
 
         // NEW SCHEMA: Expects an array of card objects
@@ -418,7 +261,6 @@
             }
         };
 
-        // UPDATED SYSTEM PROMPT: Now explicitly requests up to 20 cards
         const systemPrompt = "You are a specialized data extraction bot. Your task is to analyze the provided image, identify all individual cards (expected 1 to 20 cards), and extract exactly three specific pieces of information from EACH card as a valid JSON ARRAY of objects. For numbers, provide only the raw digits, no spaces. For the date, provide the DD/MM/YY format. If a value is not found on a specific card, use an empty string for that field in that card's object.";
         const userQuery = "Identify all cards in the image. For each card, extract the 15-digit identifier, the 17-digit barcode number, and the expiry date (DD/MM/YY). Return the results as a JSON array of objects.";
 
@@ -507,7 +349,6 @@
                     data.barcode_number = (data.barcode_number || '').replace(/[^0-9]/g, '').trim();
                     data.expiry_date = (data.expiry_date || '').trim();
 
-                    // Add a simple status flag for filtering later if needed
                     // A card is considered 'valid' if at least one key field is extracted
                     data.isValid = data.identifier.length === 15 || data.barcode_number.length === 17 || data.expiry_date.length > 0;
                     return data;
@@ -522,9 +363,8 @@
                 if (cardCount > 0) {
                     saveExtractedButton.disabled = false;
                     saveCountSpan.textContent = cardCount;
-                    // UPDATED MESSAGE for clarity
-                    displayStatus.textContent = `Found and validated ${cardCount} card(s). Each card will be saved as a separate record.`;
-                    alertMessage("Success", `Found and validated ${cardCount} card(s). Ready to save.`);
+                    displayStatus.textContent = `Found and validated ${cardCount} card(s). Click 'Add' to include them in the local list.`;
+                    alertMessage("Success", `Found and validated ${cardCount} card(s). Ready to add.`);
                 } else {
                     displayStatus.textContent = 'No valid card data was extracted.';
                     alertMessage("No Data Found", "Could not extract any valid card data from the image.");
@@ -535,146 +375,49 @@
                 displayError("Failed to extract data. Check console for details.");
             } finally {
                 processImageButton.disabled = false;
-                processImageButton.textContent = '2. Extract ALL Cards (Identifier, Barcode, Date)';
                 hideLoading();
             }
         }
 
         // -------------------------------------------------------------------
-        // 4. FIRESTORE OPERATIONS
+        // 3. LOCAL DATA MANAGEMENT
         // -------------------------------------------------------------------
 
-        // Helper to get the correct collection path
-        function getCollectionRef() {
-            if (!db || !userId) {
-                console.error("Firestore or User ID is not ready.");
-                return null;
-            }
-            // Private collection path: /artifacts/{appId}/users/{userId}/{collectionName}
-            const path = `artifacts/${appId}/users/${userId}/extracted_card_data`; // Updated collection name
-            return collection(db, path);
-        }
-        
-        // Function to save all extracted numbers to Firestore (ROBUST LOGIC RETAINED)
-        window.saveExtractedNumbers = async function() {
+        // Function to add extracted cards to the local list
+        window.addExtractedCardsToLocalList = function() {
             if (!extractedData || extractedData.length === 0) {
-                alertMessage("No Data", "No cards were extracted to save.");
-                return;
-            }
-            
-            if (!db) {
-                displayError("Database is not configured. Cannot save data.");
+                alertMessage("No Data", "No cards were extracted to add.");
                 return;
             }
             
             const cardCount = extractedData.length;
+            const deviceMeta = captureDeviceMetadata();
+
+            // Prepare cards for the local list, adding metadata
+            const cardsToAdd = extractedData.map(card => ({
+                ...card,
+                ...deviceMeta, // Add all metadata fields
+                // Generate a pseudo-ID for display/sorting (no need for real Firestore ID)
+                id: crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substring(2, 15), 
+                timestamp: new Date()
+            }));
             
-            saveExtractedButton.disabled = true;
-            saveExtractedButton.textContent = `Saving ${cardCount} card(s)...`;
-            showLoading(`Saving ${cardCount} extracted cards to Firestore...`);
+            // Add to the main recorded data list
+            recordedData.unshift(...cardsToAdd); // Add to the front to show newest first
 
-            try {
-                const collectionRef = getCollectionRef();
-                if (!collectionRef) return;
-                
-                // --- ROBUST SAVING LOGIC using Promise.allSettled ---
-                
-                const savePromises = extractedData.map((card, index) => {
-                    const dataToSave = {
-                        identifier: card.identifier,
-                        barcode_number: card.barcode_number,
-                        expiry_date: card.expiry_date,
-                        
-                        // --- SECURITY/AUDITING FIELDS ---
-                        device_user_agent: deviceMetadata.userAgent,
-                        device_resolution: deviceMetadata.screenResolution,
-                        // ------------------------------------
+            // Clear the temporary extracted data state
+            extractedData = null;
+            resetDisplay();
+            
+            // Re-render and update button states
+            renderData();
+            updateExportButtonState();
 
-                        timestamp: serverTimestamp(),
-                        user: userId
-                    };
-                    
-                    // addDoc returns a promise for a single write operation
-                    return addDoc(collectionRef, dataToSave)
-                        .then(() => ({ status: 'fulfilled', cardIndex: index }))
-                        .catch(error => {
-                            console.error(`Failed to save card ${index + 1}:`, error);
-                            return ({ status: 'rejected', cardIndex: index, reason: error });
-                        });
-                });
-                
-                // Wait for ALL promises to complete (either resolved or rejected)
-                const results = await Promise.allSettled(savePromises);
-                
-                const docsSaved = results.filter(r => r.status === 'fulfilled').length;
-                const docsFailed = results.filter(r => r.status === 'rejected').length;
-
-                extractedData = null; // Clear state after attempting to save
-                resetDisplay();
-                
-                if (docsFailed === 0) {
-                    alertMessage("Success", `Successfully saved all ${docsSaved} document(s).`);
-                } else if (docsSaved > 0) {
-                    alertMessage("Partial Success", `Saved ${docsSaved} card(s). ${docsFailed} failed to save (Check console for errors).`);
-                } else {
-                    displayError(`All ${docsFailed} save attempts failed. Please check Firestore security rules and network connection.`);
-                }
-
-            } catch (e) {
-                // This catch block handles errors *before* promises are executed (e.g., initial ref error)
-                console.error("Critical error during save initiation: ", e);
-                displayError("Could not initiate database save operation.");
-            } finally {
-                saveExtractedButton.disabled = true;
-                saveCountSpan.textContent = '0';
-                saveExtractedButton.innerHTML = `<svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7H5a2 2 0 00-2 2v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3-3m0 0l-3 3m3-3v8"></path></svg>Save <span id="save-count">0</span> Card(s) as Separate Records`;
-                hideLoading();
-            }
+            alertMessage("Added", `Successfully added ${cardCount} card(s) to the local list!`);
         }
-
-        // Function to set up the real-time listener for the data
-        function setupRealtimeListener() {
-            const collectionRef = getCollectionRef();
-            if (!collectionRef) return;
-
-            const q = query(collectionRef);
-
-            onSnapshot(q, (snapshot) => {
-                hideLoading();
-                
-                recordedData = [];
-                
-                snapshot.forEach((doc) => {
-                    const data = doc.data();
-                    recordedData.push({
-                        id: doc.id,
-                        // --- CRITICAL FIX: Explicitly cast to string to prevent type issues in CSV ---
-                        identifier: String(data.identifier || 'N/A'),
-                        barcode_number: String(data.barcode_number || 'N/A'),
-                        expiry_date: String(data.expiry_date || 'N/A'),
-                        // ---------------------------------------------------------------------------
-                        device_user_agent: data.device_user_agent || 'N/A',
-                        device_resolution: data.device_resolution || 'N/A',
-                        // Ensure timestamp conversion is safe
-                        timestamp: data.timestamp && typeof data.timestamp.toDate === 'function' ? data.timestamp.toDate() : new Date()
-                    });
-                });
-                
-                // Sort by timestamp descending (newest first)
-                recordedData.sort((a, b) => b.timestamp - a.timestamp);
-
-                renderData();
-                updateExportButtonState();
-            }, (error) => {
-                console.error("Error listening to Firestore:", error);
-                hideLoading();
-                // This usually indicates an error in Security Rules or connection
-                displayError("Real-time data failed to load. Check Firebase Security Rules.");
-            });
-        }
-
+        
         // -------------------------------------------------------------------
-        // 5. UI RENDERING AND EXPORT
+        // 4. UI RENDERING AND EXPORT
         // -------------------------------------------------------------------
 
         // Function to render the list of numbers
@@ -694,13 +437,13 @@
                 li.className = 'flex flex-col items-start bg-white p-4 rounded-xl shadow-sm border border-gray-200 hover:shadow-md transition duration-150 space-y-2';
 
                 // Format the 15-digit code for readability (5-5-5)
-                const rawIdentifier = item.identifier; // Now assured to be string or 'N/A'
+                const rawIdentifier = item.identifier || 'N/A';
                 const displayIdentifierFormatted = rawIdentifier.length === 15 
                     ? rawIdentifier.slice(0, 5) + ' ' + rawIdentifier.slice(5, 10) + ' ' + rawIdentifier.slice(10)
                     : rawIdentifier;
                     
                 // Format the 17-digit code for readability (5-5-5-2)
-                const rawBarcode = item.barcode_number; // Now assured to be string or 'N/A'
+                const rawBarcode = item.barcode_number || 'N/A';
                 const displayBarcodeFormatted = rawBarcode.length > 5 
                     ? rawBarcode.slice(0, 5) + ' ' + rawBarcode.slice(5, 10) + ' ' + rawBarcode.slice(10, 15) + ' ' + rawBarcode.slice(15)
                     : rawBarcode;
@@ -710,15 +453,9 @@
                     hour: '2-digit', minute: '2-digit'
                 });
                 
-                // NEW: Get concise OS name and combine with resolution for display
-                const deviceOS = getConciseOS(item.device_user_agent);
-                const osResolutionDisplay = `${deviceOS} \\ ${item.device_resolution}`;
+                // NEW: Use concise OS and combine with resolution for display
+                const osResolutionDisplay = `${item.deviceOS || 'Unknown'} \\ ${item.screenResolution || 'N/A'}`;
                 
-                // Truncate User Agent for a title attribute (full detail on hover)
-                const shortUserAgent = item.device_user_agent.length > 50 
-                    ? item.device_user_agent.substring(0, 47) + '...' 
-                    : item.device_user_agent;
-
                 li.innerHTML = `
                     <div class="flex flex-col w-full">
                         <p class="text-xs text-gray-400 mb-1">ID | Barcode | Date | Device OS \\ Resolution</p>
@@ -732,11 +469,6 @@
                             <span class="text-xs text-gray-400 mt-2 md:mt-0">${formattedTime}</span>
                         </div>
                     </div>
-                    <!-- Keeping the full user agent accessible via a hidden/small element for audit -->
-                    <p class="text-xs text-gray-500 pt-1 w-full hidden md:block">
-                        <span class="font-semibold">Full Agent:</span> 
-                        <span title="${item.device_user_agent}" class="font-normal text-gray-400">${shortUserAgent}</span>
-                    </p>
                 `;
                 numbersList.appendChild(li);
             });
@@ -746,38 +478,44 @@
             exportButton.disabled = recordedData.length === 0;
         }
 
-        // --- CSV GENERATION (CRITICALLY CHECKED) ---
+        // --- CSV GENERATION ---
         function generateCSV() {
             if (recordedData.length === 0) return '';
 
+            // Updated headers to reflect the new device metadata structure
             const headers = [
                 "Identifier (15-Digit)", 
                 "Barcode Number (17-Digit)", 
                 "Expiry Date (DD/MM/YY)", 
                 "Timestamp", 
-                "Device User Agent", 
-                "Device Resolution", 
-                "RecordID"
+                "Device OS", 
+                "Browser Name",
+                "Screen Resolution", 
+                "Device User Agent",
+                "Local Record ID"
             ];
             let csv = headers.join(',') + '\n';
 
             recordedData.forEach(item => {
-                // NOTE: item.identifier and item.barcode_number are now guaranteed to be strings (or 'N/A')
-                // from the setupRealtimeListener logic.
+                // Helper to ensure data is quoted and cleaned for CSV
+                const clean = (data) => `"${(data || '').toString().replace(/"/g, '""')}"`;
                 
-                // Ensure data is wrapped in quotes to handle commas/special characters
-                const identifier = `"${item.identifier}"`;
-                const barcode = `"${item.barcode_number}"`; 
-                const date = `"${item.expiry_date}"`;
-                const timestamp = `"${item.timestamp.toISOString()}"`;
-                
-                // DEVICE FIELDS - escaping quotes within the user agent string
-                const userAgent = `"${item.device_user_agent.replace(/"/g, '""')}"`; 
-                const resolution = `"${item.device_resolution}"`;
+                const dataRow = [
+                    clean(item.identifier),
+                    clean(item.barcode_number),
+                    clean(item.expiry_date),
+                    clean(item.timestamp.toISOString()),
+                    
+                    // Device Metadata fields
+                    clean(item.deviceOS),
+                    clean(item.browserName),
+                    clean(item.screenResolution),
+                    clean(item.userAgent),
 
-                const recordId = `"${item.id}"`;
+                    clean(item.id)
+                ];
                 
-                csv += [identifier, barcode, date, timestamp, userAgent, resolution, recordId].join(',') + '\n';
+                csv += dataRow.join(',') + '\n';
             });
             return csv;
         }
@@ -796,7 +534,7 @@
             const url = URL.createObjectURL(blob);
             
             link.setAttribute("href", url);
-            const dateStamp = new Date().toISOString().slice(0, 10);
+            const dateStamp = new Date().toISOString().slice(0, 10).replace(/-/g, ''); // e.g., 20251022
             link.setAttribute("download", `ExtractedCardData_Export_${dateStamp}.csv`);
             
             // Trigger download
@@ -807,9 +545,11 @@
             // Clean up the object URL
             setTimeout(() => URL.revokeObjectURL(url), 100);
 
-            alertMessage("Success", "CSV file download initiated!");
+            alertMessage("Success", "CSV file download initiated! You can now share it.");
         }
         
+        // Start the application logic
+        initializeApp();
     </script>
 </body>
 </html>
