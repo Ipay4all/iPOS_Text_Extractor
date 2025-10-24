@@ -31,7 +31,7 @@
 <body class="bg-gray-50 min-h-screen flex items-center justify-center p-4">
 
     <div id="app-container" class="bg-white shadow-2xl rounded-xl w-full max-w-4xl p-6 md:p-10 transition-all duration-300">
-        <h1 class="4xl font-extrabold text-emerald-600 mb-2">Multi-Card CSV Extractor - beta 1.0</h1>
+        <h1 class="4xl font-extrabold text-emerald-600 mb-2">Multi-Card CSV Extractor - beta 2.0</h1>
         <p class="text-gray-500 mb-6 border-b pb-4">Capture an image of cards to extract data and immediately download it as a CSV file.</p>
 
         <!-- Loading and Error Display -->
@@ -88,7 +88,7 @@
 
 
         <!-- Action and Status Area -->
-        <div class="flex justify-between items-center mb-6 border-t pt-4">
+        <div class="flex justify-between items-center mb-1 border-t pt-4">
             <h2 class="text-2xl font-bold text-gray-700">Local List (<span id="count">0</span>)</h2>
             
             <!-- Direct Download Button -->
@@ -98,6 +98,7 @@
                 Download CSV
             </button>
         </div>
+        <p class="text-sm text-gray-500 mb-4">All timestamps are recorded and displayed in **Gulf Standard Time (GMT+4)**.</p>
 
 
         <!-- Data List -->
@@ -170,12 +171,15 @@
             const screenResolution = `${window.screen.width}x${window.screen.height}`;
             const browserName = userAgent.includes('Chrome') ? 'Chrome' : userAgent.includes('Firefox') ? 'Firefox' : userAgent.includes('Safari') ? 'Safari' : 'Other';
             
+            // --- TIMEZONE CHANGE: Capture the raw Date object ---
+            const rawTimestamp = new Date();
+            
             return {
                 userAgent: userAgent,
                 screenResolution: screenResolution,
                 deviceOS: getConciseOS(userAgent),
                 browserName: browserName,
-                timestamp: new Date()
+                timestamp: rawTimestamp // Store the raw Date object
             };
         }
         
@@ -385,6 +389,33 @@
         // -------------------------------------------------------------------
         // 3. LOCAL DATA MANAGEMENT
         // -------------------------------------------------------------------
+        
+        // Helper function to check if a card is a duplicate based on its primary numbers
+        function isDuplicate(card) {
+            // Normalize inputs (trim and ensure string)
+            const newIdentifier = (card.identifier || '').trim();
+            const newBarcode = (card.barcode_number || '').trim();
+
+            // Only check against existing data if we have at least one valid number from the new card
+            if (newIdentifier === '' && newBarcode === '') {
+                return false; // Can't check for duplication if no key data is present
+            }
+
+            return recordedData.some(existingCard => {
+                const existingIdentifier = (existingCard.identifier || '').trim();
+                const existingBarcode = (existingCard.barcode_number || '').trim();
+
+                // Check Identifier match (if both exist)
+                const identifierMatch = newIdentifier !== '' && newIdentifier === existingIdentifier;
+                
+                // Check Barcode match (if both exist)
+                const barcodeMatch = newBarcode !== '' && newBarcode === existingBarcode;
+
+                // Consider it a duplicate if EITHER the identifier OR the barcode matches an existing record
+                return identifierMatch || barcodeMatch;
+            });
+        }
+
 
         // Function to add extracted cards to the local list
         window.addExtractedCardsToLocalList = function() {
@@ -393,20 +424,43 @@
                 return;
             }
             
-            const cardCount = extractedData.length;
             const deviceMeta = captureDeviceMetadata();
+            const newCardsToAdd = [];
+            let duplicatesSkipped = 0;
 
-            // Prepare cards for the local list, adding metadata
-            const cardsToAdd = extractedData.map(card => ({
-                ...card,
-                ...deviceMeta, // Add all metadata fields
-                // Generate a pseudo-ID for display/sorting (no need for real Firestore ID)
-                id: crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substring(2, 15), 
-                timestamp: new Date()
-            }));
+            // Iterate over the extracted cards and check for duplicates
+            extractedData.forEach(card => {
+                if (isDuplicate(card)) {
+                    duplicatesSkipped++;
+                } else {
+                    // This is a unique card, prepare it for saving
+                    newCardsToAdd.push({
+                        ...card,
+                        ...deviceMeta, // Add all metadata fields
+                        // Generate a pseudo-ID for display/sorting
+                        id: crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substring(2, 15), 
+                        timestamp: deviceMeta.timestamp // Use the raw Date object for saving
+                    });
+                }
+            });
             
-            // Add to the main recorded data list
-            recordedData.unshift(...cardsToAdd); // Add to the front to show newest first
+            const uniqueCardsAdded = newCardsToAdd.length;
+
+            if (uniqueCardsAdded > 0) {
+                // Add unique cards to the main recorded data list
+                recordedData.unshift(...newCardsToAdd); // Add to the front to show newest first
+            }
+
+            // Provide feedback based on the outcome
+            if (uniqueCardsAdded > 0 && duplicatesSkipped > 0) {
+                 alertMessage("Partial Success", `Added ${uniqueCardsAdded} unique card(s). Skipped ${duplicatesSkipped} duplicate card(s).`);
+            } else if (uniqueCardsAdded > 0) {
+                 alertMessage("Added", `Successfully added ${uniqueCardsAdded} card(s) to the local list!`);
+            } else if (duplicatesSkipped > 0) {
+                 alertMessage("Duplicates Skipped", `All ${duplicatesSkipped} extracted card(s) were already in the list and have been skipped.`);
+            } else {
+                alertMessage("No Cards Added", "No unique or valid cards were found to add.");
+            }
 
             // Clear the temporary extracted data state
             extractedData = null;
@@ -415,14 +469,25 @@
             // Re-render and update button states
             renderData();
             updateExportButtonState();
-
-            alertMessage("Added", `Successfully added ${cardCount} card(s) to the local list!`);
         }
         
         // -------------------------------------------------------------------
         // 4. UI RENDERING AND EXPORT
         // -------------------------------------------------------------------
 
+        // --- NEW: Time Formatting Function (GMT+4) ---
+        function formatTimeToGMT4(dateObject) {
+            // Uses Intl.DateTimeFormat with the specific timezone identifier for GMT+4 (Asia/Dubai)
+            return dateObject.toLocaleString('en-US', {
+                timeZone: 'Asia/Dubai', // Represents GMT+4 / Gulf Standard Time
+                month: 'short', 
+                day: 'numeric',
+                hour: '2-digit', 
+                minute: '2-digit',
+                hour12: true // Ensure AM/PM format
+            });
+        }
+        
         // Function to render the list of numbers
         function renderData() {
             numbersList.innerHTML = '';
@@ -451,10 +516,8 @@
                     ? rawBarcode.slice(0, 5) + ' ' + rawBarcode.slice(5, 10) + ' ' + rawBarcode.slice(10, 15) + ' ' + rawBarcode.slice(15)
                     : rawBarcode;
 
-                const formattedTime = item.timestamp.toLocaleString('en-US', {
-                    month: 'short', day: 'numeric',
-                    hour: '2-digit', minute: '2-digit'
-                });
+                // --- NEW: Use GMT+4 formatting for display ---
+                const formattedTime = formatTimeToGMT4(item.timestamp);
                 
                 // NEW: Use concise OS and combine with resolution for display
                 const osResolutionDisplay = `${item.deviceOS || 'Unknown'} \\ ${item.screenResolution || 'N/A'}`;
@@ -469,7 +532,7 @@
                                 <span class="text-emerald-600">${item.expiry_date || 'N/A'}</span>
                                 <span class="text-gray-500 font-normal ml-2 md:ml-4">| ${osResolutionDisplay}</span>
                             </p>
-                            <span class="text-xs text-gray-400 mt-2 md:mt-0">${formattedTime}</span>
+                            <span class="text-xs text-gray-400 mt-2 md:mt-0">${formattedTime} (GMT+4)</span>
                         </div>
                     </div>
                 `;
@@ -490,7 +553,8 @@
                 "Identifier (15-Digit)", 
                 "Barcode Number (17-Digit)", 
                 "Expiry Date (DD/MM/YY)", 
-                "Timestamp", 
+                "Timestamp (ISO 8601 UTC)", // Always keep UTC in the raw export file
+                "Timestamp (GMT+4 Display)", // New column for formatted time
                 "Device OS", 
                 "Browser Name",
                 "Screen Resolution", 
@@ -503,11 +567,16 @@
                 // Helper to ensure data is quoted and cleaned for CSV
                 const clean = (data) => `"${(data || '').toString().replace(/"/g, '""')}"`;
                 
+                // --- NEW: ISO String (UTC) for raw data, and GMT+4 for formatted column ---
+                const isoTimestamp = item.timestamp.toISOString(); // Raw ISO 8601 (UTC)
+                const formattedGmt4 = formatTimeToGMT4(item.timestamp); // Formatted GMT+4 string
+                
                 const dataRow = [
                     clean(item.identifier),
                     clean(item.barcode_number),
                     clean(item.expiry_date),
-                    clean(item.timestamp.toISOString()),
+                    clean(isoTimestamp), // Raw UTC for technical accuracy
+                    clean(formattedGmt4 + " GMT+4"), // Formatted for user convenience
                     
                     // Device Metadata fields
                     clean(item.deviceOS),
@@ -538,7 +607,7 @@
             
             link.setAttribute("href", url);
             const dateStamp = new Date().toISOString().slice(0, 10).replace(/-/g, ''); // e.g., 20251022
-            link.setAttribute("download", `ExtractedCardData_Export_${dateStamp}.csv`);
+            link.setAttribute("download", `ExtractedCardData_Export_${dateStamp}_GMT+4.csv`);
             
             // Trigger download
             document.body.appendChild(link);
@@ -548,7 +617,7 @@
             // Clean up the object URL
             setTimeout(() => URL.revokeObjectURL(url), 100);
 
-            alertMessage("Success", "CSV file download initiated! You can now share it.");
+            alertMessage("Success", "CSV file download initiated! The timestamps are set to GMT+4.");
         }
         
         // Start the application logic
