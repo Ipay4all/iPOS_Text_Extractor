@@ -31,7 +31,7 @@
 <body class="bg-gray-50 min-h-screen flex items-center justify-center p-4">
 
     <div id="app-container" class="bg-white shadow-2xl rounded-xl w-full max-w-4xl p-6 md:p-10 transition-all duration-300">
-        <h1 class="4xl font-extrabold text-emerald-600 mb-2">Multi-Card CSV Extractor - beta 2.0</h1>
+        <h1 class="4xl font-extrabold text-emerald-600 mb-2">Multi-Card CSV Extractor - beta 3.0</h1>
         <p class="text-gray-500 mb-6 border-b pb-4">Capture an image of cards to extract data and immediately download it as a CSV file.</p>
 
         <!-- Loading and Error Display -->
@@ -93,9 +93,9 @@
             
             <!-- Direct Download Button -->
             <button id="export-button" onclick="triggerCSVDownload()" disabled
-                    class="bg-gray-500 hover:bg-gray-600 text-white font-medium py-2 px-4 rounded-lg shadow-md transition duration-150 disabled:bg-gray-400 flex items-center">
+                    class="bg-emerald-500 hover:bg-emerald-600 text-white font-medium py-2 px-4 rounded-lg shadow-md transition duration-150 disabled:bg-gray-400 flex items-center">
                 <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
-                Download CSV
+                Download CSV (Excel-Safe)
             </button>
         </div>
         <p class="text-sm text-gray-500 mb-4">All timestamps are recorded and displayed in **Gulf Standard Time (GMT+4)**.</p>
@@ -475,16 +475,15 @@
         // 4. UI RENDERING AND EXPORT
         // -------------------------------------------------------------------
 
-        // --- NEW: Time Formatting Function (GMT+4) ---
+        // Helper function to format time to GMT+4 (Asia/Dubai)
         function formatTimeToGMT4(dateObject) {
-            // Uses Intl.DateTimeFormat with the specific timezone identifier for GMT+4 (Asia/Dubai)
             return dateObject.toLocaleString('en-US', {
-                timeZone: 'Asia/Dubai', // Represents GMT+4 / Gulf Standard Time
+                timeZone: 'Asia/Dubai', 
                 month: 'short', 
                 day: 'numeric',
                 hour: '2-digit', 
                 minute: '2-digit',
-                hour12: true // Ensure AM/PM format
+                hour12: true 
             });
         }
         
@@ -516,10 +515,10 @@
                     ? rawBarcode.slice(0, 5) + ' ' + rawBarcode.slice(5, 10) + ' ' + rawBarcode.slice(10, 15) + ' ' + rawBarcode.slice(15)
                     : rawBarcode;
 
-                // --- NEW: Use GMT+4 formatting for display ---
+                // Use GMT+4 formatting for display
                 const formattedTime = formatTimeToGMT4(item.timestamp);
                 
-                // NEW: Use concise OS and combine with resolution for display
+                // Use concise OS and combine with resolution for display
                 const osResolutionDisplay = `${item.deviceOS || 'Unknown'} \\ ${item.screenResolution || 'N/A'}`;
                 
                 li.innerHTML = `
@@ -544,50 +543,64 @@
             exportButton.disabled = recordedData.length === 0;
         }
 
-        // --- CSV GENERATION ---
+        // --- CSV GENERATION (Updated to use text-qualification prefix) ---
         function generateCSV() {
             if (recordedData.length === 0) return '';
 
-            // Updated headers to reflect the new device metadata structure
+            // Define the delimiter (Comma)
+            const DELIMITER = ','; 
+
+            // Define the Text Qualifier (Single Quote)
+            const TEXT_QUALIFIER = "'";
+
+            // Function to prepare data for CSV: prefix with single quote and wrap in double quotes
+            const qualify = (data) => {
+                const str = (data || '').toString().replace(/"/g, '""'); // Escape double quotes within data
+                // Prepend the Text Qualifier, then wrap the whole thing in double quotes.
+                // Excel sees '"'content' and interprets the single quote as a text qualifier for the content
+                return `"${TEXT_QUALIFIER}${str}"`;
+            };
+
+            // Updated headers (don't qualify headers, they don't have number conversion issues)
             const headers = [
                 "Identifier (15-Digit)", 
                 "Barcode Number (17-Digit)", 
                 "Expiry Date (DD/MM/YY)", 
-                "Timestamp (ISO 8601 UTC)", // Always keep UTC in the raw export file
-                "Timestamp (GMT+4 Display)", // New column for formatted time
+                "Timestamp (ISO 8601 UTC)", 
+                "Timestamp (GMT+4 Display)", 
                 "Device OS", 
                 "Browser Name",
                 "Screen Resolution", 
                 "Device User Agent",
                 "Local Record ID"
             ];
-            let csv = headers.join(',') + '\n';
+            // Start the CSV string with headers
+            let csv = headers.join(DELIMITER) + '\n';
 
             recordedData.forEach(item => {
-                // Helper to ensure data is quoted and cleaned for CSV
-                const clean = (data) => `"${(data || '').toString().replace(/"/g, '""')}"`;
                 
-                // --- NEW: ISO String (UTC) for raw data, and GMT+4 for formatted column ---
+                // ISO String (UTC) for raw data, and GMT+4 for formatted column
                 const isoTimestamp = item.timestamp.toISOString(); // Raw ISO 8601 (UTC)
                 const formattedGmt4 = formatTimeToGMT4(item.timestamp); // Formatted GMT+4 string
                 
                 const dataRow = [
-                    clean(item.identifier),
-                    clean(item.barcode_number),
-                    clean(item.expiry_date),
-                    clean(isoTimestamp), // Raw UTC for technical accuracy
-                    clean(formattedGmt4 + " GMT+4"), // Formatted for user convenience
+                    // Apply qualification to all data fields
+                    qualify(item.identifier),
+                    qualify(item.barcode_number),
+                    qualify(item.expiry_date),
+                    qualify(isoTimestamp), 
+                    qualify(formattedGmt4 + " GMT+4"),
                     
                     // Device Metadata fields
-                    clean(item.deviceOS),
-                    clean(item.browserName),
-                    clean(item.screenResolution),
-                    clean(item.userAgent),
+                    qualify(item.deviceOS),
+                    qualify(item.browserName),
+                    qualify(item.screenResolution),
+                    qualify(item.userAgent),
 
-                    clean(item.id)
+                    qualify(item.id)
                 ];
                 
-                csv += dataRow.join(',') + '\n';
+                csv += dataRow.join(DELIMITER) + '\n';
             });
             return csv;
         }
@@ -601,7 +614,11 @@
                 return;
             }
             
-            const blob = new Blob([currentCSVString], { type: 'text/csv;charset=utf-8;' });
+            // BOM (Byte Order Mark) for UTF-8 encoding is prepended to ensure Excel recognizes the encoding.
+            const bom = '\uFEFF'; 
+            
+            // Use 'text/csv' and prepend BOM
+            const blob = new Blob([bom + currentCSVString], { type: 'text/csv;charset=utf-8;' }); 
             const link = document.createElement("a");
             const url = URL.createObjectURL(blob);
             
@@ -617,7 +634,7 @@
             // Clean up the object URL
             setTimeout(() => URL.revokeObjectURL(url), 100);
 
-            alertMessage("Success", "CSV file download initiated! The timestamps are set to GMT+4.");
+            alertMessage("Success", "Excel-Safe CSV download initiated! All data is exported as text.");
         }
         
         // Start the application logic
